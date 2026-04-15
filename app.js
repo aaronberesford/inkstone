@@ -252,11 +252,11 @@
     const currentCard = findTermById(state.currentCardId) || deck[0] || getFilteredVocab()[0];
 
     if (!currentCard) {
-      elements.cardTitle.textContent = "No cards";
+      elements.cardTitle.textContent = "No word selected";
       elements.cardCharacter.textContent = "Load data";
       elements.cardPinyin.textContent = "dictionary pending";
       elements.cardTranslation.textContent = "Import vocabulary to begin.";
-      elements.cardMemory.textContent = "This queue will refresh as soon as a lexicon is available.";
+      elements.cardMemory.textContent = "Search for a word and the stroke studio will update as soon as a lexicon is available.";
       elements.cardFace.classList.remove("is-hidden");
       return;
     }
@@ -271,7 +271,7 @@
     elements.cardPinyin.textContent = currentCard.pinyin;
     elements.cardTranslation.textContent = currentCard.english;
     elements.cardMemory.textContent = currentCard.memory;
-    elements.revealCard.textContent = state.revealCard ? "Hide answer" : "Reveal answer";
+    elements.revealCard.textContent = state.revealCard ? "Hide notes" : "Reveal notes";
     elements.cardFace.classList.toggle("is-hidden", !state.revealCard);
   }
 

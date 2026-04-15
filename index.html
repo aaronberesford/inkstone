@@ -111,40 +111,53 @@
       </aside>
 
       <main class="study-stage">
-        <section class="hero-panel">
-          <div class="hero-copy">
-            <p class="section-kicker">Study Queue</p>
-            <h2>Build reading speed by pairing words, sentences, and stroke memory.</h2>
-            <p>
-              This workspace is set up so we can plug in real lexicon data next. For now, the queue uses a curated starter deck based on common HSK vocabulary.
-            </p>
+        <section class="search-panel">
+          <div class="panel-header search-panel-header">
+            <div>
+              <p class="section-kicker">Dictionary Search</p>
+              <h2>Search for a word</h2>
+            </div>
           </div>
-          <div class="hero-glow" aria-hidden="true">
-            <div class="glow-ring glow-ring-a"></div>
-            <div class="glow-ring glow-ring-b"></div>
-          </div>
+          <label class="search-shell search-shell-large" for="dictionary-search">
+            <span class="sr-only">Search the lexicon</span>
+            <input
+              id="dictionary-search"
+              type="search"
+              placeholder="Search hanzi, pinyin, or English"
+              autocomplete="off"
+            >
+          </label>
         </section>
 
         <section class="focus-grid">
-          <article class="focus-card">
+          <article class="focus-card focus-studio">
             <div class="panel-header">
               <div>
-                <p class="section-kicker">Current Card</p>
+                <p class="section-kicker">Stroke Studio</p>
                 <h3 id="card-title">你好</h3>
               </div>
               <div class="panel-actions">
                 <button class="ghost-button ghost-button-small" id="card-speak" type="button">Play audio</button>
-                <button class="ghost-button" id="reveal-card" type="button">Reveal answer</button>
+                <button class="ghost-button ghost-button-small" id="stroke-replay" type="button">Replay strokes</button>
+                <button class="ghost-button" id="reveal-card" type="button">Reveal notes</button>
               </div>
             </div>
 
-            <div class="card-face" id="card-face">
-              <p class="character" id="card-character">你好</p>
-              <p class="pinyin" id="card-pinyin">ni3 hao3</p>
-              <p class="translation" id="card-translation">hello</p>
-              <p class="memory-line" id="card-memory">
-                Think of one person you would greet with this phrase today.
-              </p>
+            <div class="focus-studio-grid">
+              <div class="stroke-panel-main">
+                <div class="stroke-character-tabs" id="stroke-character-tabs"></div>
+                <div class="stroke-stage" id="stroke-stage"></div>
+                <p class="stroke-status" id="stroke-status">Loading stroke animation support.</p>
+              </div>
+
+              <div class="card-face" id="card-face">
+                <p class="character" id="card-character">你好</p>
+                <p class="pinyin" id="card-pinyin">ni3 hao3</p>
+                <p class="translation" id="card-translation">hello</p>
+                <p class="memory-line" id="card-memory">
+                  Think of one person you would greet with this phrase today.
+                </p>
+              </div>
             </div>
 
             <div class="score-row" aria-label="Review grading buttons">
@@ -205,19 +218,6 @@
       </main>
 
       <aside class="rail rail-right">
-        <section class="rail-section">
-          <p class="section-kicker">Dictionary</p>
-          <label class="search-shell" for="dictionary-search">
-            <span class="sr-only">Search the lexicon</span>
-            <input
-              id="dictionary-search"
-              type="search"
-              placeholder="Search hanzi, pinyin, or English"
-              autocomplete="off"
-            >
-          </label>
-        </section>
-
         <section class="rail-section results-shell">
           <div class="results-list" id="results-list" aria-live="polite"></div>
         </section>
@@ -243,15 +243,6 @@
             </p>
           </div>
 
-          <div class="inspector-section inspector-strokes">
-            <div class="stroke-header">
-              <span class="tiny-label">Stroke Order</span>
-              <button class="ghost-button ghost-button-small" id="stroke-replay" type="button">Replay strokes</button>
-            </div>
-            <div class="stroke-character-tabs" id="stroke-character-tabs"></div>
-            <div class="stroke-stage" id="stroke-stage"></div>
-            <p class="stroke-status" id="stroke-status">Loading stroke animation support.</p>
-          </div>
         </section>
       </aside>
     </div>
