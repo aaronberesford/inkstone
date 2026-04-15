@@ -1,7 +1,7 @@
 (function () {
   const STORAGE_KEY = "inkstone-imports-v1";
-  const DEFAULT_CEDICT_PATH = "assets/data/cedict_ts.u8";
-  const DEFAULT_TATOEBA_PATH = "assets/data/cmn.txt";
+  const DEFAULT_CEDICT_PATH = "assets/data/cedict_runtime.json";
+  const DEFAULT_TATOEBA_PATH = "assets/data/tatoeba_runtime.json";
   const DEFAULT_HSK_PATH = "assets/data/hsk_words.json";
   const MAX_AUTO_CEDICT_ENTRIES = 40000;
   const MAX_AUTO_SENTENCE_ENTRIES = 12000;
@@ -514,7 +514,7 @@
   }
 
   function autoLoadBundledCedict() {
-    state.importSummary = "Loading bundled CEDICT dictionary from assets/data/cedict_ts.u8...";
+    state.importSummary = "Loading bundled CEDICT dictionary from assets/data/cedict_runtime.json...";
     renderImportStatus();
 
     return fetch(DEFAULT_CEDICT_PATH, { cache: "no-store" })
@@ -522,10 +522,15 @@
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
-        return response.text();
+        return response.json();
       })
-      .then(function (text) {
-        const result = parseCedict(text, MAX_AUTO_CEDICT_ENTRIES);
+      .then(function (payload) {
+        const entries = payload && payload.entries ? payload.entries : [];
+        const result = {
+          entries: entries,
+          totalCount: payload && payload.totalCount ? payload.totalCount : entries.length,
+          wasCapped: payload && payload.totalCount ? payload.totalCount > entries.length : false
+        };
         if (result.entries.length === 0) {
           throw new Error("No dictionary rows were parsed.");
         }
@@ -544,7 +549,7 @@
   }
 
   function autoLoadBundledSentences() {
-    state.importSummary = state.importSummary + " Loading bundled Tatoeba sentences from assets/data/cmn.txt...";
+    state.importSummary = state.importSummary + " Loading bundled Tatoeba sentences from assets/data/tatoeba_runtime.json...";
     renderImportStatus();
 
     return fetch(DEFAULT_TATOEBA_PATH, { cache: "no-store" })
@@ -552,10 +557,15 @@
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
-        return response.text();
+        return response.json();
       })
-      .then(function (text) {
-        const result = parseSentenceFile(text, state.vocab, MAX_AUTO_SENTENCE_ENTRIES);
+      .then(function (payload) {
+        const entries = payload && payload.entries ? payload.entries : [];
+        const result = {
+          entries: entries,
+          totalCount: payload && payload.totalCount ? payload.totalCount : entries.length,
+          wasCapped: payload && payload.totalCount ? payload.totalCount > entries.length : false
+        };
         if (result.entries.length === 0) {
           throw new Error("No Tatoeba rows were parsed.");
         }
