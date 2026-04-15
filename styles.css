@@ -256,6 +256,14 @@ input {
   font-size: 1.45rem;
 }
 
+.panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .panel-header-compact {
   margin-bottom: 14px;
 }
@@ -283,6 +291,11 @@ input {
   background: rgba(255, 255, 255, 0.54);
   color: var(--accent-700);
   cursor: pointer;
+}
+
+.ghost-button-small {
+  padding: 10px 14px;
+  font-size: 0.88rem;
 }
 
 .ghost-button:hover,
@@ -397,6 +410,12 @@ input {
   margin: 0 0 4px;
   font-size: 1.24rem;
   color: var(--ink-950);
+}
+
+.sentence-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
 .sentence-pinyin,
@@ -743,6 +762,60 @@ input {
   padding-top: 16px;
   margin-top: 16px;
   border-top: 1px solid rgba(115, 97, 81, 0.14);
+}
+
+.inspector-strokes {
+  display: grid;
+  gap: 12px;
+}
+
+.stroke-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.stroke-character-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stroke-chip {
+  padding: 8px 12px;
+  border: 1px solid rgba(115, 97, 81, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.stroke-chip.active {
+  background: var(--accent-700);
+  border-color: var(--accent-700);
+  color: #fff7ef;
+}
+
+.stroke-stage {
+  min-height: 220px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 245, 0.94), rgba(246, 232, 211, 0.84));
+  border: 1px solid rgba(115, 97, 81, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(115, 97, 81, 0.08);
+  display: grid;
+  place-items: center;
+}
+
+.stroke-stage canvas,
+.stroke-stage svg {
+  max-width: 100%;
+}
+
+.stroke-status {
+  margin: 0;
+  color: var(--ink-600);
+  line-height: 1.5;
 }
 
 .sr-only {

@@ -132,7 +132,10 @@
                 <p class="section-kicker">Current Card</p>
                 <h3 id="card-title">你好</h3>
               </div>
-              <button class="ghost-button" id="reveal-card" type="button">Reveal answer</button>
+              <div class="panel-actions">
+                <button class="ghost-button ghost-button-small" id="card-speak" type="button">Play audio</button>
+                <button class="ghost-button" id="reveal-card" type="button">Reveal answer</button>
+              </div>
             </div>
 
             <div class="card-face" id="card-face">
@@ -225,7 +228,10 @@
               <p class="section-kicker">Inspector</p>
               <h2 id="inspector-headword">你好</h2>
             </div>
-            <span class="pill" id="inspector-level">HSK 1</span>
+            <div class="panel-actions">
+              <button class="ghost-button ghost-button-small" id="inspector-speak" type="button">Play word</button>
+              <span class="pill" id="inspector-level">HSK 1</span>
+            </div>
           </div>
           <p class="inspector-pinyin" id="inspector-pinyin">ni3 hao3</p>
           <p class="inspector-definition" id="inspector-definition">hello; hi</p>
@@ -237,15 +243,21 @@
             </p>
           </div>
 
-          <div class="inspector-section">
-            <span class="tiny-label">Stroke source</span>
-            <p>Ready for Make Me a Hanzi JSON once we add the dataset.</p>
+          <div class="inspector-section inspector-strokes">
+            <div class="stroke-header">
+              <span class="tiny-label">Stroke Order</span>
+              <button class="ghost-button ghost-button-small" id="stroke-replay" type="button">Replay strokes</button>
+            </div>
+            <div class="stroke-character-tabs" id="stroke-character-tabs"></div>
+            <div class="stroke-stage" id="stroke-stage"></div>
+            <p class="stroke-status" id="stroke-status">Loading stroke animation support.</p>
           </div>
         </section>
       </aside>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.7.3/dist/hanzi-writer.min.js"></script>
   <script src="assets/data/sample-data.js"></script>
   <script src="app.js"></script>
 </body>

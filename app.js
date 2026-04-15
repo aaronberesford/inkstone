@@ -7,12 +7,16 @@
   const MAX_AUTO_SENTENCE_ENTRIES = 12000;
   const MAX_LOCAL_VOCAB_PERSIST = 250;
   const MAX_LOCAL_SENTENCE_PERSIST = 500;
+  const SEARCH_DEBOUNCE_MS = 90;
   const baseData = cloneData(window.CHINESE_APP_DATA || { vocab: [], sentences: [], dailyChallenge: {} });
   const importedData = loadImportedData();
+  let searchDebounceId = 0;
+  let activeStrokeCharacter = "";
+  let strokeWriter = null;
 
   const state = {
-    vocab: mergeById(baseData.vocab, importedData.vocab),
-    sentences: mergeById(baseData.sentences, importedData.sentences),
+    vocab: preprocessVocabEntries(mergeById(baseData.vocab, importedData.vocab)),
+    sentences: preprocessSentenceEntries(mergeById(baseData.sentences, importedData.sentences)),
     selectedLevel: "All",
     search: "",
     selectedTermId: baseData.vocab[0] ? baseData.vocab[0].id : null,
@@ -48,6 +52,7 @@
     cardPinyin: document.getElementById("card-pinyin"),
     cardTranslation: document.getElementById("card-translation"),
     cardMemory: document.getElementById("card-memory"),
+    cardSpeak: document.getElementById("card-speak"),
     revealCard: document.getElementById("reveal-card"),
     sentenceCount: document.getElementById("sentence-count"),
     sentenceStack: document.getElementById("sentence-stack"),
@@ -59,6 +64,11 @@
     inspectorPinyin: document.getElementById("inspector-pinyin"),
     inspectorDefinition: document.getElementById("inspector-definition"),
     inspectorMemory: document.getElementById("inspector-memory"),
+    inspectorSpeak: document.getElementById("inspector-speak"),
+    strokeReplay: document.getElementById("stroke-replay"),
+    strokeCharacterTabs: document.getElementById("stroke-character-tabs"),
+    strokeStage: document.getElementById("stroke-stage"),
+    strokeStatus: document.getElementById("stroke-status"),
     importStatus: document.getElementById("import-status"),
     cedictFile: document.getElementById("cedict-file"),
     sentencesFile: document.getElementById("sentences-file")
@@ -77,6 +87,24 @@
     elements.revealCard.addEventListener("click", function () {
       state.revealCard = !state.revealCard;
       renderCard();
+    });
+
+    elements.cardSpeak.addEventListener("click", function () {
+      const term = getSelectedTerm();
+      if (term) {
+        speakMandarin(term.simplified);
+      }
+    });
+
+    elements.inspectorSpeak.addEventListener("click", function () {
+      const term = getSelectedTerm();
+      if (term) {
+        speakMandarin(term.simplified);
+      }
+    });
+
+    elements.strokeReplay.addEventListener("click", function () {
+      replayStrokeAnimation();
     });
 
     elements.levelFilter.addEventListener("click", function (event) {
@@ -106,20 +134,29 @@
         state.currentCardId = termId;
         state.revealCard = false;
         render();
+        return;
+      }
+
+      const speakButton = event.target.closest("[data-speak-text]");
+      if (speakButton) {
+        speakMandarin(speakButton.dataset.speakText);
+        return;
+      }
+
+      const strokeChip = event.target.closest("[data-stroke-char]");
+      if (strokeChip) {
+        setActiveStrokeCharacter(strokeChip.dataset.strokeChar);
       }
     });
 
     elements.search.addEventListener("input", function (event) {
-      state.search = event.target.value.trim();
-      const matches = getFilteredVocab();
-      if (matches.length > 0) {
-        state.selectedTermId = matches[0].id;
-        if (!findTermById(state.currentCardId) || !matches.some(function (item) { return item.id === state.currentCardId; })) {
-          state.currentCardId = matches[0].id;
-          state.revealCard = false;
-        }
-      }
-      render();
+      const nextSearch = event.target.value.trim();
+      clearTimeout(searchDebounceId);
+      searchDebounceId = setTimeout(function () {
+        state.search = nextSearch;
+        syncSelectionToMatches();
+        renderSearchViews();
+      }, SEARCH_DEBOUNCE_MS);
     });
 
     elements.cedictFile.addEventListener("change", function (event) {
@@ -140,6 +177,25 @@
       state.revealCard = false;
       render();
     });
+  }
+
+  function syncSelectionToMatches() {
+    const matches = getFilteredVocab();
+    if (matches.length > 0) {
+      state.selectedTermId = matches[0].id;
+      if (!findTermById(state.currentCardId) || !matches.some(function (item) { return item.id === state.currentCardId; })) {
+        state.currentCardId = matches[0].id;
+        state.revealCard = false;
+      }
+    }
+  }
+
+  function renderSearchViews() {
+    renderCard();
+    renderResults();
+    renderInspector();
+    renderSentences();
+    renderBreakdown();
   }
 
   function render() {
@@ -325,6 +381,7 @@
     elements.inspectorPinyin.textContent = term.pinyin;
     elements.inspectorDefinition.textContent = term.english;
     elements.inspectorMemory.textContent = term.memory;
+    renderStrokePanel(term);
   }
 
   function renderSentences() {
@@ -344,7 +401,8 @@
       wrapper.innerHTML = [
         '<p class="sentence-hanzi">' + escapeHtml(sentence.zh) + "</p>",
         sentence.pinyin ? '<p class="sentence-pinyin">' + escapeHtml(sentence.pinyin) + "</p>" : "",
-        sentence.en ? '<p class="sentence-english">' + escapeHtml(sentence.en) + "</p>" : '<p class="sentence-english">No English gloss attached yet.</p>'
+        sentence.en ? '<p class="sentence-english">' + escapeHtml(sentence.en) + "</p>" : '<p class="sentence-english">No English gloss attached yet.</p>',
+        '<div class="sentence-actions"><button class="ghost-button ghost-button-small" type="button" data-speak-text="' + escapeHtml(sentence.zh) + '">Play sentence</button></div>'
       ].join("");
       elements.sentenceStack.appendChild(wrapper);
     });
@@ -372,6 +430,33 @@
 
   function renderImportStatus() {
     elements.importStatus.textContent = state.importSummary;
+  }
+
+  function speakMandarin(text) {
+    if (!text || !window.speechSynthesis) {
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(function (voice) {
+      return /^zh/i.test(voice.lang || "") && /CN|Hans/i.test(voice.lang || "");
+    }) || voices.find(function (voice) {
+      return /^zh/i.test(voice.lang || "");
+    });
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+      utterance.lang = preferredVoice.lang;
+    } else {
+      utterance.lang = "zh-CN";
+    }
+
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
   }
 
   function gradeCard(score) {
@@ -467,6 +552,77 @@
     }) || null;
   }
 
+  function renderStrokePanel(term) {
+    const characters = (term.simplified || "").split("").filter(containsHanzi);
+    elements.strokeCharacterTabs.innerHTML = "";
+
+    if (!characters.length) {
+      elements.strokeStage.innerHTML = "";
+      elements.strokeStatus.textContent = "Stroke animation is available when the selected term contains Hanzi.";
+      return;
+    }
+
+    characters.forEach(function (char, index) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "stroke-chip" + (char === activeStrokeCharacter || (!activeStrokeCharacter && index === 0) ? " active" : "");
+      button.dataset.strokeChar = char;
+      button.textContent = char;
+      elements.strokeCharacterTabs.appendChild(button);
+    });
+
+    const nextChar = characters.indexOf(activeStrokeCharacter) !== -1 ? activeStrokeCharacter : characters[0];
+    setActiveStrokeCharacter(nextChar);
+  }
+
+  function setActiveStrokeCharacter(char) {
+    activeStrokeCharacter = char || "";
+    Array.prototype.forEach.call(elements.strokeCharacterTabs.querySelectorAll("[data-stroke-char]"), function (button) {
+      button.classList.toggle("active", button.dataset.strokeChar === activeStrokeCharacter);
+    });
+    loadStrokeAnimation(activeStrokeCharacter);
+  }
+
+  function loadStrokeAnimation(char) {
+    if (!char) {
+      return;
+    }
+
+    if (!window.HanziWriter) {
+      elements.strokeStage.innerHTML = "";
+      elements.strokeStatus.textContent = "Stroke animation support is unavailable right now.";
+      return;
+    }
+
+    elements.strokeStage.innerHTML = '<div id="stroke-writer-target"></div>';
+    elements.strokeStatus.textContent = "Drawing " + char + "...";
+    strokeWriter = window.HanziWriter.create("stroke-writer-target", char, {
+      width: 220,
+      height: 220,
+      padding: 10,
+      strokeAnimationSpeed: 0.9,
+      delayBetweenStrokes: 120,
+      strokeColor: "#8f2f23",
+      radicalColor: "#356857",
+      outlineColor: "rgba(115, 97, 81, 0.18)"
+    });
+
+    strokeWriter.animateCharacter()
+      .then(function () {
+        elements.strokeStatus.textContent = "Stroke order ready for " + char + ".";
+      })
+      .catch(function () {
+        elements.strokeStatus.textContent = "Stroke data is not available for " + char + " yet.";
+      });
+  }
+
+  function replayStrokeAnimation() {
+    if (strokeWriter && activeStrokeCharacter) {
+      elements.strokeStatus.textContent = "Replaying " + activeStrokeCharacter + "...";
+      strokeWriter.animateCharacter();
+    }
+  }
+
   function applyDailyChallenge() {
     const challenge = baseData.dailyChallenge || {};
     elements.challengeTitle.textContent = challenge.title || "Daily Challenge";
@@ -535,7 +691,7 @@
           throw new Error("No dictionary rows were parsed.");
         }
 
-        state.vocab = mergeById(state.vocab, result.entries);
+        state.vocab = preprocessVocabEntries(mergeById(state.vocab, result.entries));
         ensureSelection();
         state.importSummary = buildCedictSummary(result, "Loaded bundled CEDICT.");
         render();
@@ -570,7 +726,7 @@
           throw new Error("No Tatoeba rows were parsed.");
         }
 
-        state.sentences = mergeById(state.sentences, result.entries);
+        state.sentences = preprocessSentenceEntries(mergeById(state.sentences, result.entries));
         state.importSummary = state.importSummary + " " + buildSentenceSummary(result, "Loaded bundled Tatoeba.");
         render();
         return result;
@@ -595,7 +751,7 @@
         return;
       }
 
-      state.vocab = mergeById(state.vocab, result.entries);
+      state.vocab = preprocessVocabEntries(mergeById(state.vocab, result.entries));
       ensureSelection();
       state.importSummary = buildCedictSummary(result, "Imported " + file.name + ".");
       saveImportedState();
@@ -616,7 +772,7 @@
         return;
       }
 
-      state.sentences = mergeById(state.sentences, result.entries);
+      state.sentences = preprocessSentenceEntries(mergeById(state.sentences, result.entries));
       state.importSummary = buildSentenceSummary(result, "Imported " + file.name + ".");
       saveImportedState();
       render();
@@ -847,10 +1003,10 @@
   }
 
   function termMatchesSearch(term, normalizedSearch) {
-    const normalizedHanzi = normalizeHanziText([term.simplified, term.traditional].join(" "));
-    const normalizedPinyin = normalizeSearchText(term.pinyin || "");
-    const normalizedEnglish = normalizeSearchText(term.english || "");
-    const keywords = getEnglishKeywords(term);
+    const normalizedHanzi = term._searchHanzi || normalizeHanziText([term.simplified, term.traditional].join(" "));
+    const normalizedPinyin = term._searchPinyin || normalizeSearchText(term.pinyin || "");
+    const normalizedEnglish = term._searchEnglish || normalizeSearchText(term.english || "");
+    const keywords = term._searchKeywords || getEnglishKeywords(term);
 
     return (
       normalizedHanzi.indexOf(normalizedSearch) !== -1 ||
@@ -912,11 +1068,11 @@
   }
 
   function rankSearchMatch(term, normalizedSearch) {
-    const keywords = getEnglishKeywords(term);
-    const fullEnglish = normalizeSearchText(term.english || "");
+    const keywords = term._searchKeywords || getEnglishKeywords(term);
+    const fullEnglish = term._searchEnglish || normalizeSearchText(term.english || "");
     const simplified = normalizeHanziText(term.simplified || "");
     const traditional = normalizeHanziText(term.traditional || "");
-    const pinyin = normalizeSearchText(term.pinyin || "");
+    const pinyin = term._searchPinyin || normalizeSearchText(term.pinyin || "");
 
     if (simplified === normalizedSearch || traditional === normalizedSearch || pinyin === normalizedSearch) {
       return 0;
@@ -984,6 +1140,25 @@
 
   function normalizeHanziText(value) {
     return String(value || "").trim().toLowerCase();
+  }
+
+  function preprocessVocabEntries(entries) {
+    return entries.map(function (term) {
+      const nextTerm = Object.assign({}, term);
+      nextTerm._searchHanzi = normalizeHanziText([nextTerm.simplified, nextTerm.traditional].join(" "));
+      nextTerm._searchPinyin = normalizeSearchText(nextTerm.pinyin || "");
+      nextTerm._searchEnglish = normalizeSearchText(nextTerm.english || "");
+      nextTerm._searchKeywords = getEnglishKeywords(nextTerm);
+      return nextTerm;
+    });
+  }
+
+  function preprocessSentenceEntries(entries) {
+    return entries.map(function (sentence) {
+      const nextSentence = Object.assign({}, sentence);
+      nextSentence._speakText = nextSentence.zh || "";
+      return nextSentence;
+    });
   }
 
   function getHskBadge(term) {
