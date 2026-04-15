@@ -292,6 +292,7 @@
     const sections = splitSearchResults(matches, normalizeSearchText(state.search));
     renderResultSection("Core Vocabulary", sections.core);
     renderResultSection("Extended Phrases", sections.extended);
+    renderResultSection("Hidden / Rare", sections.hidden);
   }
 
   function renderSearchFilters() {
@@ -339,10 +340,17 @@
   function splitSearchResults(matches, normalizedSearch) {
     const core = [];
     const extended = [];
+    const hidden = [];
 
-    matches.slice(0, 18).forEach(function (term) {
+    matches.slice(0, 24).forEach(function (term) {
       const rank = rankSearchMatch(term, normalizedSearch);
       const isCoreWord = rank <= 4 && (term.simplified || "").length <= 3;
+      const isHiddenRare = isRareTerm(term);
+
+      if (isHiddenRare) {
+        hidden.push(term);
+        return;
+      }
 
       if (isCoreWord) {
         core.push(term);
@@ -352,11 +360,12 @@
     });
 
     core.sort(function (left, right) {
-      const leftBoost = getLearnerPriorityScore(left);
-      const rightBoost = getLearnerPriorityScore(right);
-      if (leftBoost !== rightBoost) {
-        return leftBoost - rightBoost;
-      }
+      return compareSearchRank(left, right, normalizedSearch);
+    });
+    extended.sort(function (left, right) {
+      return compareSearchRank(left, right, normalizedSearch);
+    });
+    hidden.sort(function (left, right) {
       return compareSearchRank(left, right, normalizedSearch);
     });
 
@@ -366,7 +375,8 @@
 
     return {
       core: core.slice(0, 8),
-      extended: extended.slice(0, 8)
+      extended: extended.slice(0, 8),
+      hidden: hidden.slice(0, 6)
     };
   }
 
@@ -1019,17 +1029,17 @@
   }
 
   function compareSearchRank(left, right, normalizedSearch) {
-    const leftRank = rankSearchMatch(left, normalizedSearch);
-    const rightRank = rankSearchMatch(right, normalizedSearch);
+    const leftScore = getSearchPriorityScore(left, normalizedSearch);
+    const rightScore = getSearchPriorityScore(right, normalizedSearch);
 
-    if (leftRank !== rightRank) {
-      return leftRank - rightRank;
+    if (leftScore !== rightScore) {
+      return rightScore - leftScore;
     }
 
-    const leftLearnerScore = getLearnerPriorityScore(left);
-    const rightLearnerScore = getLearnerPriorityScore(right);
-    if (leftLearnerScore !== rightLearnerScore) {
-      return leftLearnerScore - rightLearnerScore;
+    const leftRank = rankSearchMatch(left, normalizedSearch);
+    const rightRank = rankSearchMatch(right, normalizedSearch);
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
     }
 
     const leftLengthScore = getPreferredLengthScore(left);
@@ -1049,6 +1059,47 @@
     return left.simplified.localeCompare(right.simplified);
   }
 
+  function getSearchPriorityScore(term, normalizedSearch) {
+    let score = 0;
+    const level = getHskLevel(term);
+    const keywordList = term._searchKeywords || getEnglishKeywords(term);
+    const fullEnglish = term._searchEnglish || normalizeSearchText(term.english || "");
+    const charLength = (term.simplified || "").length;
+    const rank = rankSearchMatch(term, normalizedSearch);
+
+    if (/^HSK [1-3]$/i.test(level)) {
+      score += 10000;
+    } else if (/^HSK [4-6]$/i.test(level)) {
+      score += 2500;
+    }
+
+    if (keywordList.some(function (keyword) { return keyword === normalizedSearch; })) {
+      score += 5000;
+    } else if (fullEnglish === normalizedSearch || fullEnglish === ("to " + normalizedSearch)) {
+      score += 5000;
+    }
+
+    if (charLength <= 2) {
+      score += 2000;
+    } else if (charLength === 3) {
+      score += 1200;
+    } else {
+      score += Math.max(0, 500 - (charLength * 60));
+    }
+
+    if (rank <= 1) {
+      score += 1200;
+    } else if (rank <= 3) {
+      score += 700;
+    }
+
+    if (isRareTerm(term)) {
+      score -= 4000;
+    }
+
+    return score;
+  }
+
   function getPreferredLengthScore(term) {
     const length = (term.simplified || "").length;
 
@@ -1065,6 +1116,10 @@
     }
 
     return 3;
+  }
+
+  function isRareTerm(term) {
+    return getDisplayLevel(term) === "Custom" && !getHskLevel(term);
   }
 
   function rankSearchMatch(term, normalizedSearch) {
