@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inkstone | Chinese Learning Studio</title>
+  <meta
+    name="description"
+    content="A focused Chinese learning workspace with review cards, sentence study, dictionary search, and dataset import hooks."
+  >
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="background-wash" aria-hidden="true"></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Chinese Learning Studio</p>
+        <h1>Inkstone</h1>
+      </div>
+      <div class="topbar-meta">
+        <div>
+          <span class="meta-label">Focus</span>
+          <strong>HSK 1-3 foundation</strong>
+        </div>
+        <div>
+          <span class="meta-label">Mode</span>
+          <strong>Offline-ready MVP</strong>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="rail rail-left">
+        <section class="rail-section">
+          <p class="section-kicker">Today</p>
+          <div class="stat-block">
+            <span class="stat-value" id="cards-reviewed">0</span>
+            <span class="stat-label">cards reviewed</span>
+          </div>
+          <div class="stat-grid">
+            <div>
+              <span class="tiny-label">Streak</span>
+              <strong id="streak-count">9 days</strong>
+            </div>
+            <div>
+              <span class="tiny-label">Accuracy</span>
+              <strong id="accuracy-rate">82%</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="rail-section">
+          <p class="section-kicker">Levels</p>
+          <div class="level-filter" id="level-filter" role="tablist" aria-label="HSK levels">
+            <button class="chip active" data-level="All" type="button">All</button>
+            <button class="chip" data-level="HSK 1" type="button">HSK 1</button>
+            <button class="chip" data-level="HSK 2" type="button">HSK 2</button>
+            <button class="chip" data-level="HSK 3" type="button">HSK 3</button>
+            <button class="chip" data-level="Custom" type="button">Custom</button>
+          </div>
+          <label class="toggle-row" for="hsk-only-toggle">
+            <span>
+              <span class="tiny-label">Search Mode</span>
+              <strong>HSK Only</strong>
+            </span>
+            <input id="hsk-only-toggle" type="checkbox">
+          </label>
+        </section>
+
+        <section class="rail-section">
+          <p class="section-kicker">Daily Challenge</p>
+          <article class="challenge-panel">
+            <h2 id="challenge-title">Chengyu warm-up</h2>
+            <p id="challenge-text">
+              Match an idiom to its meaning, then reuse one target word in a fresh sentence.
+            </p>
+            <div class="challenge-word" id="challenge-word">画龙点睛</div>
+          </article>
+        </section>
+
+        <section class="rail-section progress-section">
+          <div class="panel-header panel-header-compact">
+            <div>
+              <p class="section-kicker">Session Progress</p>
+              <h3>Momentum for this block</h3>
+            </div>
+            <span class="pill" id="progress-percent">0%</span>
+          </div>
+
+          <div class="progress-meter" aria-hidden="true">
+            <div class="progress-meter-fill" id="progress-meter-fill"></div>
+          </div>
+
+          <div class="progress-grid">
+            <div>
+              <span class="tiny-label">Goal</span>
+              <strong id="session-goal">18 cards</strong>
+            </div>
+            <div>
+              <span class="tiny-label">Mastered</span>
+              <strong id="mastered-count">0 words</strong>
+            </div>
+          </div>
+
+          <div class="learned-shell">
+            <span class="tiny-label">Words Learned Today</span>
+            <div class="learned-list" id="learned-list"></div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="study-stage">
+        <section class="hero-panel">
+          <div class="hero-copy">
+            <p class="section-kicker">Study Queue</p>
+            <h2>Build reading speed by pairing words, sentences, and stroke memory.</h2>
+            <p>
+              This workspace is set up so we can plug in real lexicon data next. For now, the queue uses a curated starter deck based on common HSK vocabulary.
+            </p>
+          </div>
+          <div class="hero-glow" aria-hidden="true">
+            <div class="glow-ring glow-ring-a"></div>
+            <div class="glow-ring glow-ring-b"></div>
+          </div>
+        </section>
+
+        <section class="focus-grid">
+          <article class="focus-card">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Current Card</p>
+                <h3 id="card-title">你好</h3>
+              </div>
+              <button class="ghost-button" id="reveal-card" type="button">Reveal answer</button>
+            </div>
+
+            <div class="card-face" id="card-face">
+              <p class="character" id="card-character">你好</p>
+              <p class="pinyin" id="card-pinyin">ni3 hao3</p>
+              <p class="translation" id="card-translation">hello</p>
+              <p class="memory-line" id="card-memory">
+                Think of one person you would greet with this phrase today.
+              </p>
+            </div>
+
+            <div class="score-row" aria-label="Review grading buttons">
+              <button class="score-button danger" data-score="again" type="button">Again</button>
+              <button class="score-button" data-score="hard" type="button">Hard</button>
+              <button class="score-button good" data-score="good" type="button">Good</button>
+              <button class="score-button easy" data-score="easy" type="button">Easy</button>
+            </div>
+          </article>
+
+          <article class="sentence-card">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Sentence Lab</p>
+                <h3>Context before memorization</h3>
+              </div>
+              <span class="pill" id="sentence-count">0 examples</span>
+            </div>
+
+            <div class="sentence-stack" id="sentence-stack"></div>
+          </article>
+        </section>
+
+        <section class="detail-grid">
+          <article class="detail-panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Character Notes</p>
+                <h3>Break the word into usable parts</h3>
+              </div>
+            </div>
+            <div class="hanzi-breakdown" id="hanzi-breakdown"></div>
+          </article>
+
+          <article class="detail-panel import-panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-kicker">Dataset Intake</p>
+                <h3>Bring your own lexicon</h3>
+              </div>
+            </div>
+
+            <label class="upload-field" for="cedict-file">
+              <span>Import CEDICT <code>.u8</code></span>
+              <input id="cedict-file" type="file" accept=".u8,.txt">
+            </label>
+
+            <label class="upload-field" for="sentences-file">
+              <span>Import sentence TSV or CSV</span>
+              <input id="sentences-file" type="file" accept=".csv,.tsv,.txt">
+            </label>
+
+            <div class="import-status" id="import-status">
+              Waiting for your first dictionary file.
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <aside class="rail rail-right">
+        <section class="rail-section">
+          <p class="section-kicker">Dictionary</p>
+          <label class="search-shell" for="dictionary-search">
+            <span class="sr-only">Search the lexicon</span>
+            <input
+              id="dictionary-search"
+              type="search"
+              placeholder="Search hanzi, pinyin, or English"
+              autocomplete="off"
+            >
+          </label>
+        </section>
+
+        <section class="rail-section results-shell">
+          <div class="results-list" id="results-list" aria-live="polite"></div>
+        </section>
+
+        <section class="rail-section inspector-shell">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Inspector</p>
+              <h2 id="inspector-headword">你好</h2>
+            </div>
+            <span class="pill" id="inspector-level">HSK 1</span>
+          </div>
+          <p class="inspector-pinyin" id="inspector-pinyin">ni3 hao3</p>
+          <p class="inspector-definition" id="inspector-definition">hello; hi</p>
+
+          <div class="inspector-section">
+            <span class="tiny-label">Study prompt</span>
+            <p id="inspector-memory">
+              Think of one person you would greet with this phrase today.
+            </p>
+          </div>
+
+          <div class="inspector-section">
+            <span class="tiny-label">Stroke source</span>
+            <p>Ready for Make Me a Hanzi JSON once we add the dataset.</p>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script src="assets/data/sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
