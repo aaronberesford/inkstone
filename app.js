@@ -8,6 +8,9 @@
   const MAX_LOCAL_VOCAB_PERSIST = 250;
   const MAX_LOCAL_SENTENCE_PERSIST = 500;
   const SEARCH_DEBOUNCE_MS = 90;
+  const VAULT_DB_NAME = "inkstone-vault";
+  const VAULT_DB_VERSION = 1;
+  const VAULT_PROGRESS_KEY = "progress";
   const baseData = cloneData(window.CHINESE_APP_DATA || { vocab: [], sentences: [], dailyChallenge: {} });
   const importedData = loadImportedData();
   let searchDebounceId = 0;
@@ -33,7 +36,11 @@
     streak: 9,
     sessionGoal: 18,
     masteredWords: [],
-    importSummary: importedData.summary || "Waiting for your first dictionary file."
+    importSummary: importedData.summary || "Waiting for your first dictionary file.",
+    savedWords: [],
+    savedSentences: [],
+    vaultReady: false,
+    vaultStatus: "Connecting to local vault..."
   };
 
   const elements = {
@@ -45,6 +52,12 @@
     sessionGoal: document.getElementById("session-goal"),
     masteredCount: document.getElementById("mastered-count"),
     learnedList: document.getElementById("learned-list"),
+    savedWordCount: document.getElementById("saved-word-count"),
+    savedSentenceCount: document.getElementById("saved-sentence-count"),
+    exportVault: document.getElementById("export-vault"),
+    importVaultTrigger: document.getElementById("import-vault-trigger"),
+    importVaultFile: document.getElementById("import-vault-file"),
+    vaultStatus: document.getElementById("vault-status"),
     challengeTitle: document.getElementById("challenge-title"),
     challengeText: document.getElementById("challenge-text"),
     challengeWord: document.getElementById("challenge-word"),
@@ -69,6 +82,7 @@
     inspectorDefinition: document.getElementById("inspector-definition"),
     inspectorMemory: document.getElementById("inspector-memory"),
     inspectorSpeak: document.getElementById("inspector-speak"),
+    saveWord: document.getElementById("save-word"),
     strokeReplay: document.getElementById("stroke-replay"),
     strokeCharacterTabs: document.getElementById("stroke-character-tabs"),
     strokeStage: document.getElementById("stroke-stage"),
@@ -85,6 +99,7 @@
     bindEvents();
     render();
     autoLoadBundledAssets();
+    initializeVault();
   }
 
   function bindEvents() {
@@ -105,6 +120,10 @@
       if (term) {
         speakMandarin(term.simplified);
       }
+    });
+
+    elements.saveWord.addEventListener("click", function () {
+      toggleSavedWord();
     });
 
     elements.strokeReplay.addEventListener("click", function () {
@@ -148,6 +167,12 @@
       const speakButton = event.target.closest("[data-speak-text]");
       if (speakButton) {
         speakMandarin(speakButton.dataset.speakText);
+        return;
+      }
+
+      const saveSentenceButton = event.target.closest("[data-save-sentence-id]");
+      if (saveSentenceButton) {
+        toggleSavedSentence(saveSentenceButton.dataset.saveSentenceId);
         return;
       }
 
@@ -279,6 +304,19 @@
       state.revealCard = false;
       render();
     });
+
+    elements.exportVault.addEventListener("click", function () {
+      exportVault();
+    });
+
+    elements.importVaultTrigger.addEventListener("click", function () {
+      elements.importVaultFile.click();
+    });
+
+    elements.importVaultFile.addEventListener("change", function (event) {
+      importVaultFile(event.target.files && event.target.files[0]);
+      event.target.value = "";
+    });
   }
 
   function syncSelectionToMatches() {
@@ -322,6 +360,7 @@
   function render() {
     renderStats();
     renderSessionProgress();
+    renderVaultPanel();
     renderSearchFilters();
     renderLevelFilter();
     renderCard();
@@ -394,6 +433,18 @@
     elements.cardMemory.textContent = currentCard.memory;
     elements.revealCard.textContent = state.revealCard ? "Hide notes" : "Reveal notes";
     elements.cardFace.classList.toggle("is-hidden", !state.revealCard);
+  }
+
+  function renderVaultPanel() {
+    if (!elements.savedWordCount) {
+      return;
+    }
+
+    elements.savedWordCount.textContent = state.savedWords.length + (state.savedWords.length === 1 ? " word" : " words");
+    elements.savedSentenceCount.textContent = state.savedSentences.length + (state.savedSentences.length === 1 ? " sentence" : " sentences");
+    elements.vaultStatus.textContent = state.vaultStatus;
+    elements.exportVault.disabled = !state.vaultReady;
+    elements.importVaultTrigger.disabled = !state.vaultReady;
   }
 
   function renderResults() {
@@ -512,6 +563,9 @@
     elements.inspectorPinyin.textContent = term.pinyin;
     elements.inspectorDefinition.textContent = term.english;
     elements.inspectorMemory.textContent = term.memory;
+    elements.saveWord.textContent = isSavedWord(term.id) ? "Saved" : "Save word";
+    elements.saveWord.classList.toggle("is-saved", isSavedWord(term.id));
+    elements.saveWord.disabled = !state.vaultReady;
     renderStrokePanel(term);
   }
 
@@ -533,7 +587,10 @@
         '<p class="sentence-hanzi">' + renderInteractiveSentence(sentence) + "</p>",
         sentence.pinyin ? '<p class="sentence-pinyin">' + escapeHtml(sentence.pinyin) + "</p>" : "",
         sentence.en ? '<p class="sentence-english">' + escapeHtml(sentence.en) + "</p>" : '<p class="sentence-english">No English gloss attached yet.</p>',
-        '<div class="sentence-actions"><button class="ghost-button ghost-button-small" type="button" data-speak-text="' + escapeHtml(sentence.zh) + '">Play sentence</button></div>'
+        '<div class="sentence-actions">' +
+          '<button class="ghost-button ghost-button-small' + (isSavedSentence(sentence.id) ? ' is-saved' : '') + '" type="button" data-save-sentence-id="' + escapeHtml(sentence.id) + '"' + (state.vaultReady ? "" : " disabled") + '>' + (isSavedSentence(sentence.id) ? "Saved" : "Save sentence") + "</button>" +
+          '<button class="ghost-button ghost-button-small" type="button" data-speak-text="' + escapeHtml(sentence.zh) + '">Play sentence</button>' +
+        "</div>"
       ].join("");
       elements.sentenceStack.appendChild(wrapper);
     });
@@ -561,6 +618,160 @@
 
   function renderImportStatus() {
     elements.importStatus.textContent = state.importSummary;
+  }
+
+  function initializeVault() {
+    if (!window.indexedDB) {
+      state.vaultStatus = "IndexedDB is not available in this browser, so portable vault sync is disabled here.";
+      renderVaultPanel();
+      return Promise.resolve();
+    }
+
+    return loadVaultSnapshot()
+      .then(function (snapshot) {
+        hydrateVaultState(snapshot);
+        state.vaultReady = true;
+        state.vaultStatus = buildVaultStatusMessage("Local vault connected.");
+        render();
+      })
+      .catch(function () {
+        state.vaultStatus = "Local vault could not be opened right now. Your study session still works, but backup tools are offline.";
+        renderVaultPanel();
+      });
+  }
+
+  function hydrateVaultState(snapshot) {
+    const words = Array.isArray(snapshot.savedWords) ? snapshot.savedWords : [];
+    const sentences = Array.isArray(snapshot.savedSentences) ? snapshot.savedSentences : [];
+    const progress = snapshot.progress || {};
+
+    state.savedWords = dedupeById(words);
+    state.savedSentences = dedupeById(sentences);
+    state.vocab = preprocessVocabEntries(mergeById(state.vocab, state.savedWords));
+    state.termIndex = buildTermIndex(state.vocab);
+    state.sentences = preprocessSentenceEntries(mergeById(state.sentences, state.savedSentences));
+
+    if (typeof progress.cardsReviewed === "number") {
+      state.cardsReviewed = progress.cardsReviewed;
+    }
+    if (typeof progress.accuracy === "number") {
+      state.accuracy = progress.accuracy;
+    }
+    if (typeof progress.streak === "number") {
+      state.streak = progress.streak;
+    }
+    if (typeof progress.sessionGoal === "number") {
+      state.sessionGoal = progress.sessionGoal;
+    }
+    if (Array.isArray(progress.masteredWords)) {
+      state.masteredWords = dedupeById(progress.masteredWords).slice(-12);
+    }
+
+    ensureSelection();
+  }
+
+  function toggleSavedWord() {
+    const term = getSelectedTerm();
+    if (!term || !state.vaultReady) {
+      return;
+    }
+
+    const nextWords = isSavedWord(term.id)
+      ? state.savedWords.filter(function (item) { return item.id !== term.id; })
+      : dedupeById(state.savedWords.concat([serializeTermForVault(term)]));
+
+    updateVaultCollections(nextWords, state.savedSentences, isSavedWord(term.id) ? "Word removed from vault." : "Word saved to vault.");
+  }
+
+  function toggleSavedSentence(sentenceId) {
+    const sentence = findSentenceById(sentenceId);
+    if (!sentence || !state.vaultReady) {
+      return;
+    }
+
+    const nextSentences = isSavedSentence(sentence.id)
+      ? state.savedSentences.filter(function (item) { return item.id !== sentence.id; })
+      : dedupeById(state.savedSentences.concat([serializeSentenceForVault(sentence)]));
+
+    updateVaultCollections(state.savedWords, nextSentences, isSavedSentence(sentence.id) ? "Sentence removed from vault." : "Sentence saved to vault.");
+  }
+
+  function updateVaultCollections(nextWords, nextSentences, statusMessage) {
+    state.savedWords = dedupeById(nextWords);
+    state.savedSentences = dedupeById(nextSentences);
+    state.vaultStatus = buildVaultStatusMessage(statusMessage);
+    persistVaultSnapshot();
+    render();
+  }
+
+  function exportVault() {
+    if (!state.vaultReady) {
+      return;
+    }
+
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      savedWords: state.savedWords,
+      savedSentences: state.savedSentences,
+      progress: buildVaultProgress()
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "inkstone-vault.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    state.vaultStatus = buildVaultStatusMessage("Vault exported as JSON.");
+    renderVaultPanel();
+  }
+
+  function importVaultFile(file) {
+    if (!file || !state.vaultReady) {
+      return;
+    }
+
+    file.text()
+      .then(function (raw) {
+        const payload = JSON.parse(raw);
+        const importedWords = dedupeById(Array.isArray(payload.savedWords) ? payload.savedWords : []);
+        const importedSentences = dedupeById(Array.isArray(payload.savedSentences) ? payload.savedSentences : []);
+        const importedProgress = payload.progress || {};
+
+        state.savedWords = importedWords;
+        state.savedSentences = importedSentences;
+        state.vocab = preprocessVocabEntries(mergeById(state.vocab, importedWords));
+        state.termIndex = buildTermIndex(state.vocab);
+        state.sentences = preprocessSentenceEntries(mergeById(state.sentences, importedSentences));
+
+        if (Array.isArray(importedProgress.masteredWords)) {
+          state.masteredWords = dedupeById(importedProgress.masteredWords).slice(-12);
+        }
+        if (typeof importedProgress.cardsReviewed === "number") {
+          state.cardsReviewed = importedProgress.cardsReviewed;
+        }
+        if (typeof importedProgress.accuracy === "number") {
+          state.accuracy = importedProgress.accuracy;
+        }
+        if (typeof importedProgress.streak === "number") {
+          state.streak = importedProgress.streak;
+        }
+        if (typeof importedProgress.sessionGoal === "number") {
+          state.sessionGoal = importedProgress.sessionGoal;
+        }
+
+        ensureSelection();
+        persistVaultSnapshot();
+        state.vaultStatus = buildVaultStatusMessage("Vault imported successfully.");
+        render();
+      })
+      .catch(function () {
+        state.vaultStatus = "That vault file could not be imported. Please check that it is a valid Inkstone JSON export.";
+        renderVaultPanel();
+      });
   }
 
   function speakMandarin(text) {
@@ -621,6 +832,7 @@
     const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % deck.length : 0;
     state.currentCardId = deck[nextIndex].id;
     state.selectedTermId = state.currentCardId;
+    persistVaultSnapshot();
     render();
   }
 
@@ -638,6 +850,58 @@
     if (state.masteredWords.length > 12) {
       state.masteredWords = state.masteredWords.slice(-12);
     }
+  }
+
+  function isSavedWord(termId) {
+    return state.savedWords.some(function (item) { return item.id === termId; });
+  }
+
+  function isSavedSentence(sentenceId) {
+    return state.savedSentences.some(function (item) { return item.id === sentenceId; });
+  }
+
+  function findSentenceById(sentenceId) {
+    return state.sentences.find(function (sentence) {
+      return sentence.id === sentenceId;
+    }) || null;
+  }
+
+  function serializeTermForVault(term) {
+    return {
+      id: term.id,
+      simplified: term.simplified,
+      traditional: term.traditional,
+      pinyin: term.pinyin,
+      english: term.english,
+      englishKeywords: term.englishKeywords || [],
+      level: term.level,
+      memory: term.memory,
+      parts: Array.isArray(term.parts) ? term.parts : []
+    };
+  }
+
+  function serializeSentenceForVault(sentence) {
+    return {
+      id: sentence.id,
+      zh: sentence.zh,
+      pinyin: sentence.pinyin,
+      en: sentence.en,
+      termIds: Array.isArray(sentence.termIds) ? sentence.termIds : []
+    };
+  }
+
+  function buildVaultProgress() {
+    return {
+      cardsReviewed: state.cardsReviewed,
+      accuracy: state.accuracy,
+      streak: state.streak,
+      sessionGoal: state.sessionGoal,
+      masteredWords: state.masteredWords
+    };
+  }
+
+  function buildVaultStatusMessage(message) {
+    return message + " " + state.savedWords.length + " saved word" + (state.savedWords.length === 1 ? "" : "s") + ", " + state.savedSentences.length + " saved sentence" + (state.savedSentences.length === 1 ? "" : "s") + ".";
   }
 
   function getSelectedTerm() {
@@ -1601,6 +1865,123 @@
     return language === "cmn" || language === "zh" || language === "zho" || language === "yue";
   }
 
+  function persistVaultSnapshot() {
+    if (!state.vaultReady || !window.indexedDB) {
+      return Promise.resolve();
+    }
+
+    const snapshot = {
+      savedWords: state.savedWords.map(serializeTermForVault),
+      savedSentences: state.savedSentences.map(serializeSentenceForVault),
+      progress: buildVaultProgress()
+    };
+
+    return saveVaultSnapshot(snapshot).catch(function () {
+      state.vaultStatus = "The local vault could not save the latest update. You can keep studying, but export/import may be stale until refresh.";
+      renderVaultPanel();
+    });
+  }
+
+  function loadVaultSnapshot() {
+    return openVaultDatabase().then(function (db) {
+      const transaction = db.transaction(["savedWords", "savedSentences", "meta"], "readonly");
+      return Promise.all([
+        idbRequestToPromise(transaction.objectStore("savedWords").getAll()),
+        idbRequestToPromise(transaction.objectStore("savedSentences").getAll()),
+        idbRequestToPromise(transaction.objectStore("meta").get(VAULT_PROGRESS_KEY)),
+        idbTransactionComplete(transaction)
+      ]).then(function (results) {
+        return {
+          savedWords: results[0] || [],
+          savedSentences: results[1] || [],
+          progress: results[2] && results[2].value ? results[2].value : {}
+        };
+      });
+    });
+  }
+
+  function saveVaultSnapshot(snapshot) {
+    return openVaultDatabase().then(function (db) {
+      const transaction = db.transaction(["savedWords", "savedSentences", "meta"], "readwrite");
+      const savedWordsStore = transaction.objectStore("savedWords");
+      const savedSentencesStore = transaction.objectStore("savedSentences");
+      const metaStore = transaction.objectStore("meta");
+
+      savedWordsStore.clear();
+      savedSentencesStore.clear();
+
+      (snapshot.savedWords || []).forEach(function (word) {
+        savedWordsStore.put(word);
+      });
+
+      (snapshot.savedSentences || []).forEach(function (sentence) {
+        savedSentencesStore.put(sentence);
+      });
+
+      metaStore.put({
+        key: VAULT_PROGRESS_KEY,
+        value: snapshot.progress || {}
+      });
+
+      return idbTransactionComplete(transaction);
+    });
+  }
+
+  function openVaultDatabase() {
+    return new Promise(function (resolve, reject) {
+      const request = window.indexedDB.open(VAULT_DB_NAME, VAULT_DB_VERSION);
+
+      request.onerror = function () {
+        reject(request.error || new Error("Vault open failed."));
+      };
+
+      request.onupgradeneeded = function () {
+        const db = request.result;
+        if (!db.objectStoreNames.contains("savedWords")) {
+          db.createObjectStore("savedWords", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("savedSentences")) {
+          db.createObjectStore("savedSentences", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("meta")) {
+          db.createObjectStore("meta", { keyPath: "key" });
+        }
+      };
+
+      request.onsuccess = function () {
+        resolve(request.result);
+      };
+    });
+  }
+
+  function idbRequestToPromise(request) {
+    return new Promise(function (resolve, reject) {
+      request.onsuccess = function () {
+        resolve(request.result);
+      };
+
+      request.onerror = function () {
+        reject(request.error || new Error("IndexedDB request failed."));
+      };
+    });
+  }
+
+  function idbTransactionComplete(transaction) {
+    return new Promise(function (resolve, reject) {
+      transaction.oncomplete = function () {
+        resolve();
+      };
+
+      transaction.onerror = function () {
+        reject(transaction.error || new Error("IndexedDB transaction failed."));
+      };
+
+      transaction.onabort = function () {
+        reject(transaction.error || new Error("IndexedDB transaction aborted."));
+      };
+    });
+  }
+
   function loadImportedData() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -1627,6 +2008,17 @@
 
   function cloneData(data) {
     return JSON.parse(JSON.stringify(data));
+  }
+
+  function dedupeById(items) {
+    const seen = {};
+    return (items || []).filter(function (item) {
+      if (!item || !item.id || seen[item.id]) {
+        return false;
+      }
+      seen[item.id] = true;
+      return true;
+    });
   }
 
   function clamp(value, min, max) {

@@ -292,6 +292,12 @@ input {
   transform: translateY(-1px);
 }
 
+.ghost-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .card-face {
   min-height: 280px;
   padding: 26px;
@@ -551,6 +557,8 @@ input {
 
 .sentence-actions {
   display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
   justify-content: flex-end;
   margin-top: 10px;
 }
@@ -772,6 +780,26 @@ input {
   margin: 12px 0 0;
   color: var(--ink-600);
   line-height: 1.5;
+}
+
+.vault-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.vault-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ghost-button.is-saved {
+  background: rgba(53, 104, 87, 0.14);
+  border-color: rgba(53, 104, 87, 0.26);
+  color: var(--jade-500);
 }
 
 .search-shell {
@@ -1035,6 +1063,11 @@ code {
 
   .score-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vault-actions,
+  .vault-grid {
+    grid-template-columns: 1fr;
   }
 
   .character {
