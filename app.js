@@ -14,6 +14,7 @@
   let activeStrokeCharacter = "";
   let strokeWriter = null;
   let sentencePreviewEl = null;
+  let resultPreviewEl = null;
 
   const initialVocab = preprocessVocabEntries(mergeById(baseData.vocab, importedData.vocab));
   const state = {
@@ -207,6 +208,49 @@
       }
     });
 
+    document.addEventListener("mouseover", function (event) {
+      const resultItem = event.target.closest(".result-item[data-term-id]");
+      if (!resultItem) {
+        return;
+      }
+
+      showResultPreview(resultItem.dataset.termId, event.clientX, event.clientY);
+    });
+
+    document.addEventListener("mouseout", function (event) {
+      const resultItem = event.target.closest(".result-item[data-term-id]");
+      if (!resultItem) {
+        return;
+      }
+
+      const relatedTarget = event.relatedTarget;
+      if (relatedTarget && resultItem.contains(relatedTarget)) {
+        return;
+      }
+
+      hideResultPreview();
+    });
+
+    document.addEventListener("focusin", function (event) {
+      const resultItem = event.target.closest(".result-item[data-term-id]");
+      if (!resultItem) {
+        return;
+      }
+
+      const rect = resultItem.getBoundingClientRect();
+      showResultPreview(
+        resultItem.dataset.termId,
+        rect.left + rect.width,
+        rect.top + (rect.height / 2)
+      );
+    });
+
+    document.addEventListener("focusout", function (event) {
+      if (event.target.closest(".result-item[data-term-id]")) {
+        hideResultPreview();
+      }
+    });
+
     elements.search.addEventListener("input", function (event) {
       const nextSearch = event.target.value.trim();
       clearTimeout(searchDebounceId);
@@ -264,6 +308,7 @@
     }
 
     hideSentencePreview();
+    hideResultPreview();
   }
 
   function renderSearchViews() {
@@ -744,6 +789,64 @@
     }
 
     sentencePreviewEl.hidden = true;
+  }
+
+  function getResultPreviewElement() {
+    if (resultPreviewEl) {
+      return resultPreviewEl;
+    }
+
+    resultPreviewEl = document.createElement("div");
+    resultPreviewEl.className = "result-tooltip";
+    resultPreviewEl.hidden = true;
+    document.body.appendChild(resultPreviewEl);
+    return resultPreviewEl;
+  }
+
+  function showResultPreview(termId, clientX, clientY) {
+    const term = findTermById(termId);
+    if (!term) {
+      hideResultPreview();
+      return;
+    }
+
+    const tooltip = getResultPreviewElement();
+    const level = getHskLevel(term);
+    tooltip.innerHTML = [
+      '<div class="result-tooltip-head">',
+      '<strong>' + escapeHtml(term.simplified) + "</strong>",
+      level ? '<span class="result-tooltip-badge">' + escapeHtml(level) + "</span>" : "",
+      "</div>",
+      '<p class="result-tooltip-pinyin">' + escapeHtml(term.pinyin || "Pinyin pending") + "</p>",
+      '<p class="result-tooltip-definition">' + escapeHtml(term.english || "Definition pending") + "</p>"
+    ].join("");
+    tooltip.hidden = false;
+    moveResultPreview(clientX, clientY);
+  }
+
+  function moveResultPreview(clientX, clientY) {
+    const tooltip = getResultPreviewElement();
+    const offsetX = 18;
+    const offsetY = 12;
+    const preferredLeft = clientX + offsetX;
+    const left = preferredLeft + tooltip.offsetWidth > window.innerWidth - 12
+      ? Math.max(12, clientX - tooltip.offsetWidth - 18)
+      : preferredLeft;
+    const top = Math.min(
+      Math.max(12, clientY - Math.round(tooltip.offsetHeight / 2)),
+      Math.max(12, window.innerHeight - tooltip.offsetHeight - 12)
+    );
+
+    tooltip.style.left = left + "px";
+    tooltip.style.top = top + "px";
+  }
+
+  function hideResultPreview() {
+    if (!resultPreviewEl) {
+      return;
+    }
+
+    resultPreviewEl.hidden = true;
   }
 
   function renderStrokePanel(term) {

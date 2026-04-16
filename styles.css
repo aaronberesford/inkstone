@@ -481,6 +481,66 @@ input {
   line-height: 1.45;
 }
 
+.result-tooltip {
+  position: fixed;
+  z-index: 31;
+  max-width: 280px;
+  padding: 12px 14px;
+  border: 1px solid rgba(115, 97, 81, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 249, 241, 0.98);
+  box-shadow: 0 16px 36px rgba(46, 26, 7, 0.16);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.result-tooltip[hidden] {
+  display: none;
+}
+
+.result-tooltip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.result-tooltip-head strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.22rem;
+  color: var(--ink-950);
+}
+
+.result-tooltip-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(53, 104, 87, 0.12);
+  color: var(--jade-500);
+  border: 1px solid rgba(53, 104, 87, 0.18);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.result-tooltip-pinyin,
+.result-tooltip-definition {
+  margin: 0;
+}
+
+.result-tooltip-pinyin {
+  color: var(--accent-700);
+  font-size: 0.94rem;
+}
+
+.result-tooltip-definition {
+  margin-top: 4px;
+  color: var(--ink-800);
+  line-height: 1.45;
+}
+
 .sentence-actions {
   display: flex;
   justify-content: flex-end;
