@@ -117,35 +117,6 @@
           </div>
         </section>
 
-        <section class="rail-section vault-section">
-          <div class="panel-header panel-header-compact">
-            <div>
-              <p class="section-kicker">Settings</p>
-              <h3>Sync / Backup</h3>
-            </div>
-          </div>
-
-          <div class="vault-grid">
-            <div>
-              <span class="tiny-label">Saved Words</span>
-              <strong id="saved-word-count">0 words</strong>
-            </div>
-            <div>
-              <span class="tiny-label">Saved Sentences</span>
-              <strong id="saved-sentence-count">0 sentences</strong>
-            </div>
-          </div>
-
-          <div class="vault-actions">
-            <button class="ghost-button ghost-button-small" id="export-vault" type="button">Export Vault</button>
-            <button class="ghost-button ghost-button-small" id="import-vault-trigger" type="button">Import Vault</button>
-            <input id="import-vault-file" type="file" accept=".json" hidden>
-          </div>
-
-          <div class="import-status" id="vault-status">
-            Local vault ready. Saved words and sentences will stay on this device until you export them.
-          </div>
-        </section>
       </aside>
 
       <main class="study-stage">
@@ -201,6 +172,36 @@
             </section>
 
             <section class="vault-column vault-column-sentences">
+              <section class="vault-stroke-card vault-settings-card">
+                <div class="panel-header panel-header-compact">
+                  <div>
+                    <p class="section-kicker">Settings</p>
+                    <h3>Sync / Backup</h3>
+                  </div>
+                </div>
+
+                <div class="vault-grid">
+                  <div>
+                    <span class="tiny-label">Saved Words</span>
+                    <strong id="saved-word-count">0 words</strong>
+                  </div>
+                  <div>
+                    <span class="tiny-label">Saved Sentences</span>
+                    <strong id="saved-sentence-count">0 sentences</strong>
+                  </div>
+                </div>
+
+                <div class="vault-actions">
+                  <button class="ghost-button ghost-button-small" id="export-vault" type="button">Export Vault</button>
+                  <button class="ghost-button ghost-button-small" id="import-vault-trigger" type="button">Import Vault</button>
+                  <input id="import-vault-file" type="file" accept=".json" hidden>
+                </div>
+
+                <div class="import-status" id="vault-status">
+                  Local vault ready. Saved words and sentences will stay on this device until you export them.
+                </div>
+              </section>
+
               <div class="panel-header panel-header-compact">
                 <div>
                   <p class="section-kicker">Saved Sentences</p>
