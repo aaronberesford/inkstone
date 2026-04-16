@@ -14,8 +14,10 @@
   let activeStrokeCharacter = "";
   let strokeWriter = null;
 
+  const initialVocab = preprocessVocabEntries(mergeById(baseData.vocab, importedData.vocab));
   const state = {
-    vocab: preprocessVocabEntries(mergeById(baseData.vocab, importedData.vocab)),
+    vocab: initialVocab,
+    termIndex: buildTermIndex(initialVocab),
     sentences: preprocessSentenceEntries(mergeById(baseData.sentences, importedData.sentences)),
     selectedLevel: "All",
     search: "",
@@ -129,10 +131,14 @@
 
       const resultItem = event.target.closest("[data-term-id]");
       if (resultItem && resultItem.classList.contains("result-item")) {
-        const termId = resultItem.dataset.termId;
-        state.selectedTermId = termId;
-        state.currentCardId = termId;
-        state.revealCard = false;
+        activateTerm(resultItem.dataset.termId, false);
+        render();
+        return;
+      }
+
+      const sentenceToken = event.target.closest("[data-sentence-term-id]");
+      if (sentenceToken) {
+        activateTerm(sentenceToken.dataset.sentenceTermId, true);
         render();
         return;
       }
@@ -187,6 +193,22 @@
         state.currentCardId = matches[0].id;
         state.revealCard = false;
       }
+    }
+  }
+
+  function activateTerm(termId, syncSearch) {
+    const term = findTermById(termId);
+    if (!term) {
+      return;
+    }
+
+    state.selectedTermId = term.id;
+    state.currentCardId = term.id;
+    state.revealCard = false;
+
+    if (syncSearch) {
+      state.search = term.simplified || "";
+      elements.search.value = state.search;
     }
   }
 
@@ -409,7 +431,7 @@
       const wrapper = document.createElement("article");
       wrapper.className = "sentence-item";
       wrapper.innerHTML = [
-        '<p class="sentence-hanzi">' + escapeHtml(sentence.zh) + "</p>",
+        '<p class="sentence-hanzi">' + renderInteractiveSentence(sentence) + "</p>",
         sentence.pinyin ? '<p class="sentence-pinyin">' + escapeHtml(sentence.pinyin) + "</p>" : "",
         sentence.en ? '<p class="sentence-english">' + escapeHtml(sentence.en) + "</p>" : '<p class="sentence-english">No English gloss attached yet.</p>',
         '<div class="sentence-actions"><button class="ghost-button ghost-button-small" type="button" data-speak-text="' + escapeHtml(sentence.zh) + '">Play sentence</button></div>'
@@ -562,6 +584,60 @@
     }) || null;
   }
 
+  function renderInteractiveSentence(sentence) {
+    const text = String(sentence.zh || "");
+    const chunks = [];
+    let index = 0;
+
+    while (index < text.length) {
+      const match = findSentenceMatch(text, index);
+      if (match) {
+        chunks.push([
+          '<button class="sentence-token',
+          match.term.id === state.selectedTermId ? ' active' : '',
+          '" type="button" data-sentence-term-id="',
+          escapeHtml(match.term.id),
+          '">',
+          escapeHtml(match.text),
+          "</button>"
+        ].join(""));
+        index += match.text.length;
+        continue;
+      }
+
+      chunks.push(escapeHtml(text.charAt(index)));
+      index += 1;
+    }
+
+    return chunks.join("");
+  }
+
+  function findSentenceMatch(text, startIndex) {
+    const maxLength = Math.min(6, text.length - startIndex);
+
+    for (let length = maxLength; length >= 1; length -= 1) {
+      const candidate = text.slice(startIndex, startIndex + length);
+      if (!isPureHanzi(candidate)) {
+        continue;
+      }
+
+      const term = findPreferredTermByText(candidate);
+      if (term) {
+        return {
+          text: candidate,
+          term: term
+        };
+      }
+    }
+
+    return null;
+  }
+
+  function findPreferredTermByText(text) {
+    const matches = state.termIndex[normalizeHanziText(text)] || [];
+    return matches[0] || null;
+  }
+
   function renderStrokePanel(term) {
     const characters = (term.simplified || "").split("").filter(containsHanzi);
     elements.strokeCharacterTabs.innerHTML = "";
@@ -702,6 +778,7 @@
         }
 
         state.vocab = preprocessVocabEntries(mergeById(state.vocab, result.entries));
+        state.termIndex = buildTermIndex(state.vocab);
         ensureSelection();
         state.importSummary = buildCedictSummary(result, "Loaded bundled CEDICT.");
         render();
@@ -762,6 +839,7 @@
       }
 
       state.vocab = preprocessVocabEntries(mergeById(state.vocab, result.entries));
+      state.termIndex = buildTermIndex(state.vocab);
       ensureSelection();
       state.importSummary = buildCedictSummary(result, "Imported " + file.name + ".");
       saveImportedState();
@@ -1208,6 +1286,51 @@
     });
   }
 
+  function buildTermIndex(entries) {
+    const index = {};
+
+    entries.forEach(function (term) {
+      [term.simplified, term.traditional].forEach(function (text) {
+        const key = normalizeHanziText(text);
+        if (!key) {
+          return;
+        }
+
+        if (!index[key]) {
+          index[key] = [];
+        }
+
+        if (!index[key].some(function (item) { return item.id === term.id; })) {
+          index[key].push(term);
+        }
+      });
+    });
+
+    Object.keys(index).forEach(function (key) {
+      index[key].sort(compareTermPreference);
+    });
+
+    return index;
+  }
+
+  function compareTermPreference(left, right) {
+    const leftPriority = getLearnerPriorityScore(left);
+    const rightPriority = getLearnerPriorityScore(right);
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    if ((left.simplified || "").length !== (right.simplified || "").length) {
+      return (left.simplified || "").length - (right.simplified || "").length;
+    }
+
+    if ((left.english || "").length !== (right.english || "").length) {
+      return (left.english || "").length - (right.english || "").length;
+    }
+
+    return (left.simplified || "").localeCompare(right.simplified || "");
+  }
+
   function preprocessSentenceEntries(entries) {
     return entries.map(function (sentence) {
       const nextSentence = Object.assign({}, sentence);
@@ -1257,6 +1380,10 @@
 
   function containsHanzi(value) {
     return /[\u3400-\u9fff]/.test(value);
+  }
+
+  function isPureHanzi(value) {
+    return /^[\u3400-\u9fff]+$/.test(String(value || ""));
   }
 
   function isChineseLanguage(language) {

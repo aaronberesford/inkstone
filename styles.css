@@ -389,6 +389,36 @@ input {
   margin: 0 0 4px;
   font-size: 1.24rem;
   color: var(--ink-950);
+  line-height: 1.7;
+}
+
+.sentence-token {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px 4px 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.sentence-token:hover,
+.sentence-token:focus-visible {
+  background: rgba(143, 47, 35, 0.1);
+  color: var(--accent-700);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.sentence-token.active {
+  background: rgba(143, 47, 35, 0.14);
+  color: var(--accent-700);
 }
 
 .sentence-actions {
