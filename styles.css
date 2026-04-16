@@ -186,6 +186,10 @@ input {
   gap: 20px;
 }
 
+.vault-gallery[hidden] {
+  display: none !important;
+}
+
 .vault-hero,
 .vault-stroke-card,
 .vault-word-card,
