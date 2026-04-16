@@ -421,6 +421,66 @@ input {
   color: var(--accent-700);
 }
 
+.sentence-tooltip {
+  position: fixed;
+  z-index: 30;
+  max-width: 260px;
+  padding: 12px 14px;
+  border: 1px solid rgba(115, 97, 81, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 249, 241, 0.96);
+  box-shadow: 0 16px 36px rgba(46, 26, 7, 0.14);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.sentence-tooltip[hidden] {
+  display: none;
+}
+
+.sentence-tooltip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.sentence-tooltip-head strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.2rem;
+  color: var(--ink-950);
+}
+
+.sentence-tooltip-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(53, 104, 87, 0.12);
+  color: var(--jade-500);
+  border: 1px solid rgba(53, 104, 87, 0.18);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sentence-tooltip-pinyin,
+.sentence-tooltip-definition {
+  margin: 0;
+}
+
+.sentence-tooltip-pinyin {
+  color: var(--accent-700);
+  font-size: 0.94rem;
+}
+
+.sentence-tooltip-definition {
+  margin-top: 4px;
+  color: var(--ink-800);
+  line-height: 1.45;
+}
+
 .sentence-actions {
   display: flex;
   justify-content: flex-end;

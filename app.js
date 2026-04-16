@@ -13,6 +13,7 @@
   let searchDebounceId = 0;
   let activeStrokeCharacter = "";
   let strokeWriter = null;
+  let sentencePreviewEl = null;
 
   const initialVocab = preprocessVocabEntries(mergeById(baseData.vocab, importedData.vocab));
   const state = {
@@ -155,6 +156,57 @@
       }
     });
 
+    document.addEventListener("mouseover", function (event) {
+      const sentenceToken = event.target.closest("[data-sentence-term-id]");
+      if (!sentenceToken) {
+        return;
+      }
+
+      showSentencePreview(sentenceToken.dataset.sentenceTermId, event.clientX, event.clientY);
+    });
+
+    document.addEventListener("mousemove", function (event) {
+      if (!sentencePreviewEl || sentencePreviewEl.hidden) {
+        return;
+      }
+
+      moveSentencePreview(event.clientX, event.clientY);
+    });
+
+    document.addEventListener("mouseout", function (event) {
+      const sentenceToken = event.target.closest("[data-sentence-term-id]");
+      if (!sentenceToken) {
+        return;
+      }
+
+      const relatedTarget = event.relatedTarget;
+      if (relatedTarget && sentenceToken.contains(relatedTarget)) {
+        return;
+      }
+
+      hideSentencePreview();
+    });
+
+    document.addEventListener("focusin", function (event) {
+      const sentenceToken = event.target.closest("[data-sentence-term-id]");
+      if (!sentenceToken) {
+        return;
+      }
+
+      const rect = sentenceToken.getBoundingClientRect();
+      showSentencePreview(
+        sentenceToken.dataset.sentenceTermId,
+        rect.left + (rect.width / 2),
+        rect.top
+      );
+    });
+
+    document.addEventListener("focusout", function (event) {
+      if (event.target.closest("[data-sentence-term-id]")) {
+        hideSentencePreview();
+      }
+    });
+
     elements.search.addEventListener("input", function (event) {
       const nextSearch = event.target.value.trim();
       clearTimeout(searchDebounceId);
@@ -210,6 +262,8 @@
       state.search = term.simplified || "";
       elements.search.value = state.search;
     }
+
+    hideSentencePreview();
   }
 
   function renderSearchViews() {
@@ -636,6 +690,60 @@
   function findPreferredTermByText(text) {
     const matches = state.termIndex[normalizeHanziText(text)] || [];
     return matches[0] || null;
+  }
+
+  function getSentencePreviewElement() {
+    if (sentencePreviewEl) {
+      return sentencePreviewEl;
+    }
+
+    sentencePreviewEl = document.createElement("div");
+    sentencePreviewEl.className = "sentence-tooltip";
+    sentencePreviewEl.hidden = true;
+    document.body.appendChild(sentencePreviewEl);
+    return sentencePreviewEl;
+  }
+
+  function showSentencePreview(termId, clientX, clientY) {
+    const term = findTermById(termId);
+    if (!term) {
+      hideSentencePreview();
+      return;
+    }
+
+    const tooltip = getSentencePreviewElement();
+    const level = getHskLevel(term);
+    tooltip.innerHTML = [
+      '<div class="sentence-tooltip-head">',
+      '<strong>' + escapeHtml(term.simplified) + "</strong>",
+      level ? '<span class="sentence-tooltip-badge">' + escapeHtml(level) + "</span>" : "",
+      "</div>",
+      '<p class="sentence-tooltip-pinyin">' + escapeHtml(term.pinyin || "Pinyin pending") + "</p>",
+      '<p class="sentence-tooltip-definition">' + escapeHtml(term.english || "Definition pending") + "</p>"
+    ].join("");
+    tooltip.hidden = false;
+    moveSentencePreview(clientX, clientY);
+  }
+
+  function moveSentencePreview(clientX, clientY) {
+    const tooltip = getSentencePreviewElement();
+    const offsetX = 16;
+    const offsetY = 18;
+    const maxLeft = Math.max(12, window.innerWidth - tooltip.offsetWidth - 12);
+    const maxTop = Math.max(12, window.innerHeight - tooltip.offsetHeight - 12);
+    const left = Math.min(maxLeft, clientX + offsetX);
+    const top = Math.min(maxTop, clientY + offsetY);
+
+    tooltip.style.left = left + "px";
+    tooltip.style.top = top + "px";
+  }
+
+  function hideSentencePreview() {
+    if (!sentencePreviewEl) {
+      return;
+    }
+
+    sentencePreviewEl.hidden = true;
   }
 
   function renderStrokePanel(term) {
