@@ -3,14 +3,35 @@
   const DEFAULT_CEDICT_PATH = "assets/data/cedict_runtime.json";
   const DEFAULT_TATOEBA_PATH = "assets/data/tatoeba_runtime.json";
   const DEFAULT_HSK_PATH = "assets/data/hsk_words.json";
-  const MAX_AUTO_CEDICT_ENTRIES = 40000;
+  const MAX_AUTO_CEDICT_ENTRIES = 130000;
   const MAX_AUTO_SENTENCE_ENTRIES = 12000;
   const MAX_LOCAL_VOCAB_PERSIST = 250;
   const MAX_LOCAL_SENTENCE_PERSIST = 500;
   const SEARCH_DEBOUNCE_MS = 90;
+  const SEARCH_INDEX_PREFIX_LIMIT = 6;
   const VAULT_DB_NAME = "inkstone-vault";
   const VAULT_DB_VERSION = 1;
   const VAULT_PROGRESS_KEY = "progress";
+  const CANONICAL_ENGLISH_OVERRIDES = {
+    ask: ["问"],
+    come: ["来"],
+    drink: ["喝"],
+    eat: ["吃"],
+    go: ["去"],
+    hear: ["听"],
+    help: ["帮助", "帮忙", "帮"],
+    learn: ["学习", "学"],
+    listen: ["听"],
+    look: ["看"],
+    nearby: ["附近"],
+    read: ["读"],
+    say: ["说"],
+    see: ["看见", "看"],
+    speak: ["说"],
+    study: ["学习", "学"],
+    talk: ["说话", "说"],
+    write: ["写"]
+  };
   const baseData = cloneData(window.CHINESE_APP_DATA || { vocab: [], sentences: [], dailyChallenge: {} });
   const importedData = loadImportedData();
   let searchDebounceId = 0;
@@ -20,11 +41,16 @@
   let vaultStrokeWriter = null;
   let sentencePreviewEl = null;
   let resultPreviewEl = null;
+  let filteredVocabCacheKey = "";
+  let filteredVocabCacheValue = [];
+  let vocabRevision = 1;
+  let hskRevision = 0;
 
   const initialVocab = preprocessVocabEntries(mergeById(baseData.vocab, importedData.vocab));
   const state = {
     vocab: initialVocab,
     termIndex: buildTermIndex(initialVocab),
+    searchIndex: buildSearchIndex(initialVocab),
     sentences: preprocessSentenceEntries(mergeById(baseData.sentences, importedData.sentences)),
     selectedLevel: "All",
     search: "",
@@ -36,6 +62,7 @@
     revealCard: false,
     hskOnly: false,
     hskLookup: {},
+    hskRankLookup: {},
     cardsReviewed: 0,
     accuracy: 82,
     streak: 9,
@@ -509,7 +536,7 @@
     elements.cardCharacter.textContent = currentCard.simplified;
     elements.cardPinyin.textContent = currentCard.pinyin;
     elements.cardTranslation.textContent = currentCard.english;
-    elements.cardMemory.textContent = currentCard.memory;
+    elements.cardMemory.textContent = getTermMemory(currentCard);
     elements.revealCard.textContent = state.revealCard ? "Hide notes" : "Reveal notes";
     elements.cardFace.classList.toggle("is-hidden", !state.revealCard);
   }
@@ -740,7 +767,7 @@
     elements.inspectorLevel.textContent = getDisplayLevel(term);
     elements.inspectorPinyin.textContent = term.pinyin;
     elements.inspectorDefinition.textContent = term.english;
-    elements.inspectorMemory.textContent = term.memory;
+    elements.inspectorMemory.textContent = getTermMemory(term);
     elements.saveWord.textContent = isSavedWord(term.id) ? "Saved" : "Save word";
     elements.saveWord.classList.toggle("is-saved", isSavedWord(term.id));
     elements.saveWord.disabled = !state.vaultReady;
@@ -776,14 +803,15 @@
 
   function renderBreakdown() {
     const term = getSelectedTerm();
+    const parts = getTermParts(term);
     elements.hanziBreakdown.innerHTML = "";
 
-    if (!term || !term.parts || term.parts.length === 0) {
+    if (!term || parts.length === 0) {
       elements.hanziBreakdown.innerHTML = '<p class="result-definition">Character notes will appear here once a card is selected.</p>';
       return;
     }
 
-    term.parts.forEach(function (part) {
+    parts.forEach(function (part) {
       const row = document.createElement("div");
       row.className = "hanzi-part";
       row.innerHTML = [
@@ -825,8 +853,7 @@
 
     state.savedWords = dedupeById(words);
     state.savedSentences = dedupeById(sentences);
-    state.vocab = preprocessVocabEntries(mergeById(state.vocab, state.savedWords));
-    state.termIndex = buildTermIndex(state.vocab);
+    setVocab(mergeById(state.vocab, state.savedWords));
     state.sentences = preprocessSentenceEntries(mergeById(state.sentences, state.savedSentences));
 
     if (typeof progress.cardsReviewed === "number") {
@@ -921,8 +948,7 @@
 
         state.savedWords = importedWords;
         state.savedSentences = importedSentences;
-        state.vocab = preprocessVocabEntries(mergeById(state.vocab, importedWords));
-        state.termIndex = buildTermIndex(state.vocab);
+        setVocab(mergeById(state.vocab, importedWords));
         state.sentences = preprocessSentenceEntries(mergeById(state.sentences, importedSentences));
 
         if (Array.isArray(importedProgress.masteredWords)) {
@@ -1149,7 +1175,20 @@
 
   function getFilteredVocab() {
     const normalizedSearch = normalizeSearchText(state.search);
-    const filtered = state.vocab.filter(function (term) {
+    const cacheKey = [
+      vocabRevision,
+      hskRevision,
+      state.selectedLevel,
+      state.hskOnly ? "1" : "0",
+      normalizedSearch
+    ].join("|");
+
+    if (filteredVocabCacheKey === cacheKey) {
+      return filteredVocabCacheValue;
+    }
+
+    const source = getSearchCandidatePool(normalizedSearch);
+    const filtered = source.filter(function (term) {
       const matchesLevel = state.selectedLevel === "All" || getDisplayLevel(term) === state.selectedLevel;
       const matchesHskOnly = !state.hskOnly || Boolean(getHskLevel(term));
       const matchesSearch = normalizedSearch.length === 0 || termMatchesSearch(term, normalizedSearch);
@@ -1157,12 +1196,17 @@
     });
 
     if (normalizedSearch.length === 0) {
+      filteredVocabCacheKey = cacheKey;
+      filteredVocabCacheValue = filtered;
       return filtered;
     }
 
-    return filtered.sort(function (left, right) {
+    const sorted = filtered.sort(function (left, right) {
       return compareSearchRank(left, right, normalizedSearch);
     });
+    filteredVocabCacheKey = cacheKey;
+    filteredVocabCacheValue = sorted;
+    return sorted;
   }
 
   function getSentencesForTerm(term) {
@@ -1358,7 +1402,8 @@
       getWriter: function () { return strokeWriter; },
       setWriter: function (writer) { strokeWriter = writer; },
       dataAttribute: "strokeChar",
-      dataName: "data-stroke-char"
+      dataName: "data-stroke-char",
+      targetId: "stroke-writer-target"
     });
   }
 
@@ -1514,6 +1559,9 @@
       })
       .then(function (payload) {
         state.hskLookup = payload && payload.lookup ? payload.lookup : {};
+        state.hskRankLookup = buildHskRankLookup(payload && payload.entries ? payload.entries : []);
+        hskRevision += 1;
+        invalidateFilteredVocabCache();
         render();
         return payload;
       });
@@ -1541,8 +1589,7 @@
           throw new Error("No dictionary rows were parsed.");
         }
 
-        state.vocab = preprocessVocabEntries(mergeById(state.vocab, result.entries));
-        state.termIndex = buildTermIndex(state.vocab);
+        setVocab(mergeById(state.vocab, result.entries));
         ensureSelection();
         state.importSummary = buildCedictSummary(result, "Loaded bundled CEDICT.");
         render();
@@ -1602,8 +1649,7 @@
         return;
       }
 
-      state.vocab = preprocessVocabEntries(mergeById(state.vocab, result.entries));
-      state.termIndex = buildTermIndex(state.vocab);
+      setVocab(mergeById(state.vocab, result.entries));
       ensureSelection();
       state.importSummary = buildCedictSummary(result, "Imported " + file.name + ".");
       saveImportedState();
@@ -1693,9 +1739,7 @@
         pinyin: pinyin,
         english: definitions || "Definition imported from CEDICT.",
         englishKeywords: englishKeywords,
-        level: "Custom",
-        memory: "Imported from CEDICT. Add a study prompt after reviewing how this word appears in context.",
-        parts: splitParts(simplified)
+        level: "Custom"
       });
     });
 
@@ -1884,6 +1928,12 @@
       return leftRank - rightRank;
     }
 
+    const leftHskRank = getHskRank(left);
+    const rightHskRank = getHskRank(right);
+    if (leftHskRank !== rightHskRank) {
+      return leftHskRank - rightHskRank;
+    }
+
     const leftLengthScore = getPreferredLengthScore(left);
     const rightLengthScore = getPreferredLengthScore(right);
     if (leftLengthScore !== rightLengthScore) {
@@ -1906,8 +1956,11 @@
     const level = getHskLevel(term);
     const keywordList = term._searchKeywords || getEnglishKeywords(term);
     const fullEnglish = term._searchEnglish || normalizeSearchText(term.english || "");
+    const primaryKeyword = getPrimaryKeyword(term);
     const charLength = (term.simplified || "").length;
     const rank = rankSearchMatch(term, normalizedSearch);
+
+    score += getCanonicalOverrideBoost(term, normalizedSearch);
 
     if (/^HSK [1-3]$/i.test(level)) {
       score += 10000;
@@ -1915,10 +1968,22 @@
       score += 2500;
     }
 
+    if (primaryKeyword === normalizedSearch) {
+      score += 9000;
+    } else if (primaryKeyword && primaryKeyword.indexOf(normalizedSearch) === 0) {
+      score += 3500;
+    }
+
     if (keywordList.some(function (keyword) { return keyword === normalizedSearch; })) {
       score += 5000;
     } else if (fullEnglish === normalizedSearch || fullEnglish === ("to " + normalizedSearch)) {
       score += 5000;
+    }
+
+    if (keywordList.length === 1) {
+      score += 300;
+    } else if (keywordList.length > 4) {
+      score -= Math.min(1200, (keywordList.length - 4) * 180);
     }
 
     if (charLength <= 2) {
@@ -2016,8 +2081,9 @@
     return String(rawEnglish || "")
       .split(/[\/;]+/)
       .map(function (part) {
+        const cleanedPart = part.trim();
         return normalizeSearchText(
-          part
+          cleanedPart
             .replace(/^to\s+/, "")
             .replace(/^\([^)]*\)\s*/, "")
             .replace(/\([^)]*\)/g, " ")
@@ -2037,6 +2103,33 @@
 
   function normalizeHanziText(value) {
     return String(value || "").trim().toLowerCase();
+  }
+
+  function getPrimaryKeyword(term) {
+    const keywords = term._searchKeywords || getEnglishKeywords(term);
+    return keywords[0] || "";
+  }
+
+  function getCanonicalOverrideBoost(term, normalizedSearch) {
+    const preferredTerms = CANONICAL_ENGLISH_OVERRIDES[normalizedSearch];
+    if (!preferredTerms || preferredTerms.length === 0) {
+      return 0;
+    }
+
+    const simplified = normalizeHanziText(term.simplified || "");
+    const traditional = normalizeHanziText(term.traditional || "");
+    let score = 0;
+
+    preferredTerms.forEach(function (word, index) {
+      const normalizedWord = normalizeHanziText(word);
+      if (normalizedWord !== simplified && normalizedWord !== traditional) {
+        return;
+      }
+
+      score = Math.max(score, index === 0 ? 28000 : 16000 - (index * 1200));
+    });
+
+    return score;
   }
 
   function preprocessVocabEntries(entries) {
@@ -2075,6 +2168,78 @@
     });
 
     return index;
+  }
+
+  function buildSearchIndex(entries) {
+    const keywordPrefix = {};
+    const pinyinPrefix = {};
+
+    entries.forEach(function (term) {
+      const seenKeywordPrefixes = {};
+      const seenPinyinPrefixes = {};
+
+      (term._searchKeywords || []).forEach(function (keyword) {
+        addPrefixesToIndex(keywordPrefix, keyword, term, seenKeywordPrefixes);
+        keyword.split(/\s+/).forEach(function (token) {
+          addPrefixesToIndex(keywordPrefix, token, term, seenKeywordPrefixes);
+        });
+      });
+
+      (term._searchPinyin || "").split(/\s+/).forEach(function (token) {
+        addPrefixesToIndex(pinyinPrefix, token, term, seenPinyinPrefixes);
+      });
+    });
+
+    return {
+      keywordPrefix: keywordPrefix,
+      pinyinPrefix: pinyinPrefix
+    };
+  }
+
+  function addPrefixesToIndex(index, rawValue, term, seen) {
+    const value = normalizeSearchText(rawValue);
+    if (!value || value.length < 2) {
+      return;
+    }
+
+    const maxLength = Math.min(SEARCH_INDEX_PREFIX_LIMIT, value.length);
+    for (let length = 2; length <= maxLength; length += 1) {
+      const prefix = value.slice(0, length);
+      const seenKey = prefix + "::" + term.id;
+      if (seen[seenKey]) {
+        continue;
+      }
+
+      seen[seenKey] = true;
+      if (!index[prefix]) {
+        index[prefix] = [];
+      }
+      index[prefix].push(term);
+    }
+  }
+
+  function getSearchCandidatePool(normalizedSearch) {
+    if (!normalizedSearch) {
+      return state.vocab;
+    }
+
+    const rawSearch = String(state.search || "").trim();
+    const normalizedHanzi = normalizeHanziText(rawSearch);
+    if (normalizedHanzi && isPureHanzi(rawSearch) && state.termIndex[normalizedHanzi]) {
+      return state.termIndex[normalizedHanzi];
+    }
+
+    if (normalizedSearch.length < 2) {
+      return state.vocab;
+    }
+
+    const keywordMatches = state.searchIndex.keywordPrefix[normalizedSearch] || [];
+    const pinyinMatches = state.searchIndex.pinyinPrefix[normalizedSearch] || [];
+    if (keywordMatches.length === 0 && pinyinMatches.length === 0) {
+      return state.vocab;
+    }
+
+    return mergeById(keywordMatches, pinyinMatches);
   }
 
   function compareTermPreference(left, right) {
@@ -2128,6 +2293,30 @@
     return "";
   }
 
+  function getHskRank(term) {
+    const simplifiedKey = normalizeHanziText(term.simplified || "");
+    const traditionalKey = normalizeHanziText(term.traditional || "");
+    return state.hskRankLookup[simplifiedKey] || state.hskRankLookup[traditionalKey] || Number.MAX_SAFE_INTEGER;
+  }
+
+  function buildHskRankLookup(entries) {
+    const lookup = {};
+
+    entries.forEach(function (entry, index) {
+      const word = normalizeHanziText(entry && entry.word ? entry.word : "");
+      if (word && !lookup[word]) {
+        lookup[word] = index + 1;
+      }
+
+      const alternate = normalizeHanziText(entry && entry.alternate ? entry.alternate : "");
+      if (alternate && !lookup[alternate]) {
+        lookup[alternate] = index + 1;
+      }
+    });
+
+    return lookup;
+  }
+
   function getDisplayLevel(term) {
     return getHskLevel(term) || String(term.level || "Custom").trim();
   }
@@ -2152,6 +2341,43 @@
 
   function isChineseLanguage(language) {
     return language === "cmn" || language === "zh" || language === "zho" || language === "yue";
+  }
+
+  function getTermMemory(term) {
+    if (!term) {
+      return "";
+    }
+
+    return term.memory || "Use the sentence lab, audio, and stroke order to build a stronger memory hook for this word.";
+  }
+
+  function getTermParts(term) {
+    if (!term) {
+      return [];
+    }
+
+    if (Array.isArray(term.parts) && term.parts.length > 0) {
+      return term.parts;
+    }
+
+    if (!containsHanzi(term.simplified || "")) {
+      return [];
+    }
+
+    return splitParts(term.simplified || "");
+  }
+
+  function setVocab(nextVocab) {
+    state.vocab = preprocessVocabEntries(nextVocab);
+    state.termIndex = buildTermIndex(state.vocab);
+    state.searchIndex = buildSearchIndex(state.vocab);
+    vocabRevision += 1;
+    invalidateFilteredVocabCache();
+  }
+
+  function invalidateFilteredVocabCache() {
+    filteredVocabCacheKey = "";
+    filteredVocabCacheValue = [];
   }
 
   function persistVaultSnapshot() {
