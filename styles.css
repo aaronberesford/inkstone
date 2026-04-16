@@ -83,6 +83,14 @@ input {
   line-height: 0.95;
 }
 
+.brand-logo {
+  display: block;
+  width: auto;
+  height: clamp(2.6rem, 5vw, 4.4rem);
+  margin-top: 6px;
+  object-fit: contain;
+}
+
 .eyebrow,
 .section-kicker {
   margin: 0;
