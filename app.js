@@ -16,6 +16,8 @@
   let searchDebounceId = 0;
   let activeStrokeCharacter = "";
   let strokeWriter = null;
+  let vaultActiveStrokeCharacter = "";
+  let vaultStrokeWriter = null;
   let sentencePreviewEl = null;
   let resultPreviewEl = null;
 
@@ -26,8 +28,11 @@
     sentences: preprocessSentenceEntries(mergeById(baseData.sentences, importedData.sentences)),
     selectedLevel: "All",
     search: "",
+    viewMode: "study",
+    vaultSearch: "",
     selectedTermId: baseData.vocab[0] ? baseData.vocab[0].id : null,
     currentCardId: baseData.vocab[0] ? baseData.vocab[0].id : null,
+    vaultFocusTermId: null,
     revealCard: false,
     hskOnly: false,
     hskLookup: {},
@@ -75,6 +80,24 @@
     sentenceStack: document.getElementById("sentence-stack"),
     hanziBreakdown: document.getElementById("hanzi-breakdown"),
     search: document.getElementById("dictionary-search"),
+    workspace: document.getElementById("workspace"),
+    studyViewButton: document.getElementById("study-view-button"),
+    vaultViewButton: document.getElementById("vault-view-button"),
+    vaultGallery: document.getElementById("vault-gallery"),
+    vaultSearch: document.getElementById("vault-search"),
+    vaultWordHeading: document.getElementById("vault-word-heading"),
+    vaultWordCount: document.getElementById("vault-word-count"),
+    vaultWordGrid: document.getElementById("vault-word-grid"),
+    vaultSentenceHeading: document.getElementById("vault-sentence-heading"),
+    vaultSentenceCount: document.getElementById("vault-sentence-count"),
+    vaultSentenceList: document.getElementById("vault-sentence-list"),
+    vaultFocusHeadword: document.getElementById("vault-focus-headword"),
+    vaultFocusPinyin: document.getElementById("vault-focus-pinyin"),
+    vaultFocusDefinition: document.getElementById("vault-focus-definition"),
+    vaultStrokeReplay: document.getElementById("vault-stroke-replay"),
+    vaultStrokeCharacterTabs: document.getElementById("vault-stroke-character-tabs"),
+    vaultStrokeStage: document.getElementById("vault-stroke-stage"),
+    vaultStrokeStatus: document.getElementById("vault-stroke-status"),
     resultsList: document.getElementById("results-list"),
     inspectorHeadword: document.getElementById("inspector-headword"),
     inspectorLevel: document.getElementById("inspector-level"),
@@ -130,6 +153,23 @@
       replayStrokeAnimation();
     });
 
+    elements.vaultStrokeReplay.addEventListener("click", function () {
+      replayVaultStrokeAnimation();
+    });
+
+    elements.studyViewButton.addEventListener("click", function () {
+      state.viewMode = "study";
+      render();
+    });
+
+    elements.vaultViewButton.addEventListener("click", function () {
+      state.viewMode = "vault";
+      if (!state.vaultFocusTermId && state.savedWords[0]) {
+        state.vaultFocusTermId = state.savedWords[0].id;
+      }
+      render();
+    });
+
     elements.levelFilter.addEventListener("click", function (event) {
       const target = event.target.closest("[data-level]");
       if (!target) {
@@ -176,9 +216,30 @@
         return;
       }
 
+      const vaultStrokeButton = event.target.closest("[data-vault-stroke-id]");
+      if (vaultStrokeButton) {
+        focusVaultTerm(vaultStrokeButton.dataset.vaultStrokeId);
+        renderVaultGallery();
+        return;
+      }
+
+      const vaultStudyButton = event.target.closest("[data-vault-study-id]");
+      if (vaultStudyButton) {
+        activateTerm(vaultStudyButton.dataset.vaultStudyId, true);
+        state.viewMode = "study";
+        render();
+        return;
+      }
+
       const strokeChip = event.target.closest("[data-stroke-char]");
       if (strokeChip) {
         setActiveStrokeCharacter(strokeChip.dataset.strokeChar);
+        return;
+      }
+
+      const vaultStrokeChip = event.target.closest("[data-vault-stroke-char]");
+      if (vaultStrokeChip) {
+        setVaultActiveStrokeCharacter(vaultStrokeChip.dataset.vaultStrokeChar);
       }
     });
 
@@ -286,6 +347,11 @@
       }, SEARCH_DEBOUNCE_MS);
     });
 
+    elements.vaultSearch.addEventListener("input", function (event) {
+      state.vaultSearch = event.target.value.trim();
+      renderVaultGallery();
+    });
+
     elements.cedictFile.addEventListener("change", function (event) {
       handleCedictImport(event.target.files && event.target.files[0]);
     });
@@ -361,6 +427,11 @@
     renderStats();
     renderSessionProgress();
     renderVaultPanel();
+    renderViewMode();
+    if (state.viewMode === "vault") {
+      renderVaultGallery();
+      return;
+    }
     renderSearchFilters();
     renderLevelFilter();
     renderCard();
@@ -369,6 +440,14 @@
     renderSentences();
     renderBreakdown();
     renderImportStatus();
+  }
+
+  function renderViewMode() {
+    const isVault = state.viewMode === "vault";
+    elements.workspace.classList.toggle("is-vault", isVault);
+    elements.studyViewButton.classList.toggle("active", !isVault);
+    elements.vaultViewButton.classList.toggle("active", isVault);
+    elements.vaultGallery.hidden = !isVault;
   }
 
   function renderStats() {
@@ -445,6 +524,105 @@
     elements.vaultStatus.textContent = state.vaultStatus;
     elements.exportVault.disabled = !state.vaultReady;
     elements.importVaultTrigger.disabled = !state.vaultReady;
+  }
+
+  function renderVaultGallery() {
+    if (!elements.vaultGallery) {
+      return;
+    }
+
+    const filteredWords = getFilteredSavedWords();
+    const filteredSentences = getFilteredSavedSentences();
+    const focusTerm = getVaultFocusTerm(filteredWords);
+
+    elements.vaultSearch.value = state.vaultSearch;
+    elements.vaultWordCount.textContent = filteredWords.length + (filteredWords.length === 1 ? " word" : " words");
+    elements.vaultSentenceCount.textContent = filteredSentences.length + (filteredSentences.length === 1 ? " sentence" : " sentences");
+    elements.vaultWordHeading.textContent = state.vaultSearch ? "Filtered saved vocabulary" : "Your study deck";
+    elements.vaultSentenceHeading.textContent = state.vaultSearch ? "Filtered saved sentences" : "Context kept for later";
+
+    renderVaultWords(filteredWords, focusTerm);
+    renderVaultSentences(filteredSentences);
+    renderVaultStrokeStudio(focusTerm);
+  }
+
+  function renderVaultWords(words, focusTerm) {
+    elements.vaultWordGrid.innerHTML = "";
+
+    if (words.length === 0) {
+      elements.vaultWordGrid.innerHTML = '<p class="vault-empty">No saved vocabulary matches this vault search yet.</p>';
+      return;
+    }
+
+    words.forEach(function (term) {
+      const card = document.createElement("article");
+      card.className = "vault-word-card";
+      card.innerHTML = [
+        '<div class="vault-word-meta">',
+        '<h4>' + escapeHtml(term.simplified) + "</h4>",
+        getHskLevel(term) ? '<span class="result-badge result-badge-hsk">' + escapeHtml(getHskLevel(term)) + "</span>" : "",
+        "</div>",
+        '<p class="vault-word-pinyin">' + escapeHtml(term.pinyin || "Pinyin pending") + "</p>",
+        '<p class="vault-word-definition">' + escapeHtml(term.english || "Definition pending") + "</p>",
+        '<div class="vault-word-actions">' +
+          '<button class="ghost-button ghost-button-small' + (focusTerm && focusTerm.id === term.id ? ' is-saved' : '') + '" type="button" data-vault-stroke-id="' + escapeHtml(term.id) + '">Play Strokes</button>' +
+          '<button class="ghost-button ghost-button-small" type="button" data-vault-study-id="' + escapeHtml(term.id) + '">Open in Study</button>' +
+        "</div>"
+      ].join("");
+      elements.vaultWordGrid.appendChild(card);
+    });
+  }
+
+  function renderVaultSentences(sentences) {
+    elements.vaultSentenceList.innerHTML = "";
+
+    if (sentences.length === 0) {
+      elements.vaultSentenceList.innerHTML = '<p class="vault-empty">No saved sentences match this vault search yet.</p>';
+      return;
+    }
+
+    sentences.forEach(function (sentence) {
+      const item = document.createElement("article");
+      item.className = "vault-sentence-entry";
+      item.innerHTML = [
+        '<p class="sentence-hanzi">' + renderInteractiveSentence(sentence) + "</p>",
+        sentence.pinyin ? '<p class="sentence-pinyin">' + escapeHtml(sentence.pinyin) + "</p>" : "",
+        sentence.en ? '<p class="sentence-english">' + escapeHtml(sentence.en) + "</p>" : '<p class="sentence-english">No English gloss attached yet.</p>',
+        '<div class="sentence-actions">' +
+          '<button class="ghost-button ghost-button-small is-saved" type="button" data-save-sentence-id="' + escapeHtml(sentence.id) + '">Saved</button>' +
+          '<button class="ghost-button ghost-button-small" type="button" data-speak-text="' + escapeHtml(sentence.zh) + '">Play sentence</button>' +
+        "</div>"
+      ].join("");
+      elements.vaultSentenceList.appendChild(item);
+    });
+  }
+
+  function renderVaultStrokeStudio(term) {
+    if (!term) {
+      elements.vaultFocusHeadword.textContent = "Choose a saved word";
+      elements.vaultFocusPinyin.textContent = "Tap any saved word to load its stroke order.";
+      elements.vaultFocusDefinition.textContent = "Your saved vocabulary will preview here.";
+      elements.vaultStrokeCharacterTabs.innerHTML = "";
+      elements.vaultStrokeStage.innerHTML = "";
+      elements.vaultStrokeStatus.textContent = "Stroke review is waiting for your first saved word.";
+      return;
+    }
+
+    elements.vaultFocusHeadword.textContent = term.simplified;
+    elements.vaultFocusPinyin.textContent = term.pinyin || "Pinyin pending";
+    elements.vaultFocusDefinition.textContent = term.english || "Definition pending";
+    renderStrokePanelForTarget(term, {
+      tabs: elements.vaultStrokeCharacterTabs,
+      stage: elements.vaultStrokeStage,
+      status: elements.vaultStrokeStatus,
+      getActiveCharacter: function () { return vaultActiveStrokeCharacter; },
+      setActiveCharacter: function (char) { vaultActiveStrokeCharacter = char || ""; },
+      getWriter: function () { return vaultStrokeWriter; },
+      setWriter: function (writer) { vaultStrokeWriter = writer; },
+      dataAttribute: "vaultStrokeChar",
+      dataName: "data-vault-stroke-char",
+      targetId: "vault-stroke-writer-target"
+    });
   }
 
   function renderResults() {
@@ -908,6 +1086,63 @@
     return findTermById(state.selectedTermId) || getFilteredVocab()[0] || null;
   }
 
+  function getVaultFocusTerm(filteredWords) {
+    const words = filteredWords || getFilteredSavedWords();
+    const focus = words.find(function (term) { return term.id === state.vaultFocusTermId; });
+    if (focus) {
+      return focus;
+    }
+
+    if (words[0]) {
+      state.vaultFocusTermId = words[0].id;
+      return words[0];
+    }
+
+    state.vaultFocusTermId = null;
+    return null;
+  }
+
+  function focusVaultTerm(termId) {
+    state.vaultFocusTermId = termId;
+  }
+
+  function getFilteredSavedWords() {
+    const query = normalizeSearchText(state.vaultSearch);
+    if (!query) {
+      return state.savedWords.slice().sort(compareVaultTermOrder);
+    }
+
+    return state.savedWords.filter(function (term) {
+      return termMatchesSearch(preprocessVocabEntries([term])[0], query);
+    }).sort(compareVaultTermOrder);
+  }
+
+  function getFilteredSavedSentences() {
+    const query = normalizeSearchText(state.vaultSearch);
+    if (!query) {
+      return state.savedSentences.slice();
+    }
+
+    return state.savedSentences.filter(function (sentence) {
+      const text = normalizeSearchText([sentence.zh, sentence.pinyin, sentence.en].join(" "));
+      return text.indexOf(query) !== -1 || normalizeHanziText(sentence.zh).indexOf(normalizeHanziText(state.vaultSearch)) !== -1;
+    });
+  }
+
+  function compareVaultTermOrder(left, right) {
+    const leftPriority = getLearnerPriorityScore(left);
+    const rightPriority = getLearnerPriorityScore(right);
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    if ((left.simplified || "").length !== (right.simplified || "").length) {
+      return (left.simplified || "").length - (right.simplified || "").length;
+    }
+
+    return (left.simplified || "").localeCompare(right.simplified || "");
+  }
+
   function getDeck() {
     return getFilteredVocab().slice(0, 8);
   }
@@ -1114,50 +1349,86 @@
   }
 
   function renderStrokePanel(term) {
+    renderStrokePanelForTarget(term, {
+      tabs: elements.strokeCharacterTabs,
+      stage: elements.strokeStage,
+      status: elements.strokeStatus,
+      getActiveCharacter: function () { return activeStrokeCharacter; },
+      setActiveCharacter: function (char) { activeStrokeCharacter = char || ""; },
+      getWriter: function () { return strokeWriter; },
+      setWriter: function (writer) { strokeWriter = writer; },
+      dataAttribute: "strokeChar",
+      dataName: "data-stroke-char"
+    });
+  }
+
+  function setActiveStrokeCharacter(char) {
+    activeStrokeCharacter = char || "";
+    syncStrokeChipState(elements.strokeCharacterTabs, "[data-stroke-char]", activeStrokeCharacter, "strokeChar");
+    loadStrokeAnimation(activeStrokeCharacter);
+  }
+
+  function loadStrokeAnimation(char) {
+    loadStrokeAnimationForTarget(char, {
+      stage: elements.strokeStage,
+      status: elements.strokeStatus,
+      getWriter: function () { return strokeWriter; },
+      setWriter: function (writer) { strokeWriter = writer; },
+      targetId: "stroke-writer-target"
+    });
+  }
+
+  function replayStrokeAnimation() {
+    if (strokeWriter && activeStrokeCharacter) {
+      elements.strokeStatus.textContent = "Replaying " + activeStrokeCharacter + "...";
+      strokeWriter.animateCharacter();
+    }
+  }
+
+  function renderStrokePanelForTarget(term, options) {
     const characters = (term.simplified || "").split("").filter(containsHanzi);
-    elements.strokeCharacterTabs.innerHTML = "";
+    const activeCharacter = options.getActiveCharacter();
+    const dataKey = options.dataAttribute || "strokeChar";
+    const dataName = options.dataName || "data-stroke-char";
+
+    options.tabs.innerHTML = "";
 
     if (!characters.length) {
-      elements.strokeStage.innerHTML = "";
-      elements.strokeStatus.textContent = "Stroke animation is available when the selected term contains Hanzi.";
+      options.stage.innerHTML = "";
+      options.status.textContent = "Stroke animation is available when the selected term contains Hanzi.";
       return;
     }
 
     characters.forEach(function (char, index) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "stroke-chip" + (char === activeStrokeCharacter || (!activeStrokeCharacter && index === 0) ? " active" : "");
-      button.dataset.strokeChar = char;
+      button.className = "stroke-chip" + (char === activeCharacter || (!activeCharacter && index === 0) ? " active" : "");
+      button.setAttribute(dataName, char);
+      button.dataset[dataKey] = char;
       button.textContent = char;
-      elements.strokeCharacterTabs.appendChild(button);
+      options.tabs.appendChild(button);
     });
 
-    const nextChar = characters.indexOf(activeStrokeCharacter) !== -1 ? activeStrokeCharacter : characters[0];
-    setActiveStrokeCharacter(nextChar);
+    const nextChar = characters.indexOf(activeCharacter) !== -1 ? activeCharacter : characters[0];
+    options.setActiveCharacter(nextChar);
+    syncStrokeChipState(options.tabs, "[" + dataName + "]", nextChar, dataKey);
+    loadStrokeAnimationForTarget(nextChar, options);
   }
 
-  function setActiveStrokeCharacter(char) {
-    activeStrokeCharacter = char || "";
-    Array.prototype.forEach.call(elements.strokeCharacterTabs.querySelectorAll("[data-stroke-char]"), function (button) {
-      button.classList.toggle("active", button.dataset.strokeChar === activeStrokeCharacter);
-    });
-    loadStrokeAnimation(activeStrokeCharacter);
-  }
-
-  function loadStrokeAnimation(char) {
+  function loadStrokeAnimationForTarget(char, options) {
     if (!char) {
       return;
     }
 
     if (!window.HanziWriter) {
-      elements.strokeStage.innerHTML = "";
-      elements.strokeStatus.textContent = "Stroke animation support is unavailable right now.";
+      options.stage.innerHTML = "";
+      options.status.textContent = "Stroke animation support is unavailable right now.";
       return;
     }
 
-    elements.strokeStage.innerHTML = '<div id="stroke-writer-target"></div>';
-    elements.strokeStatus.textContent = "Drawing " + char + "...";
-    strokeWriter = window.HanziWriter.create("stroke-writer-target", char, {
+    options.stage.innerHTML = '<div id="' + options.targetId + '"></div>';
+    options.status.textContent = "Drawing " + char + "...";
+    options.setWriter(window.HanziWriter.create(options.targetId, char, {
       width: 220,
       height: 220,
       padding: 10,
@@ -1166,21 +1437,39 @@
       strokeColor: "#8f2f23",
       radicalColor: "#356857",
       outlineColor: "rgba(115, 97, 81, 0.18)"
-    });
+    }));
 
-    strokeWriter.animateCharacter()
+    options.getWriter().animateCharacter()
       .then(function () {
-        elements.strokeStatus.textContent = "Stroke order ready for " + char + ".";
+        options.status.textContent = "Stroke order ready for " + char + ".";
       })
       .catch(function () {
-        elements.strokeStatus.textContent = "Stroke data is not available for " + char + " yet.";
+        options.status.textContent = "Stroke data is not available for " + char + " yet.";
       });
   }
 
-  function replayStrokeAnimation() {
-    if (strokeWriter && activeStrokeCharacter) {
-      elements.strokeStatus.textContent = "Replaying " + activeStrokeCharacter + "...";
-      strokeWriter.animateCharacter();
+  function syncStrokeChipState(container, selector, activeCharacter, dataKey) {
+    Array.prototype.forEach.call(container.querySelectorAll(selector), function (button) {
+      button.classList.toggle("active", button.dataset[dataKey] === activeCharacter);
+    });
+  }
+
+  function setVaultActiveStrokeCharacter(char) {
+    vaultActiveStrokeCharacter = char || "";
+    syncStrokeChipState(elements.vaultStrokeCharacterTabs, "[data-vault-stroke-char]", vaultActiveStrokeCharacter, "vaultStrokeChar");
+    loadStrokeAnimationForTarget(vaultActiveStrokeCharacter, {
+      stage: elements.vaultStrokeStage,
+      status: elements.vaultStrokeStatus,
+      getWriter: function () { return vaultStrokeWriter; },
+      setWriter: function (writer) { vaultStrokeWriter = writer; },
+      targetId: "vault-stroke-writer-target"
+    });
+  }
+
+  function replayVaultStrokeAnimation() {
+    if (vaultStrokeWriter && vaultActiveStrokeCharacter) {
+      elements.vaultStrokeStatus.textContent = "Replaying " + vaultActiveStrokeCharacter + "...";
+      vaultStrokeWriter.animateCharacter();
     }
   }
 

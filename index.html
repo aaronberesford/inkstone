@@ -32,9 +32,13 @@
           <strong>Offline-ready MVP</strong>
         </div>
       </div>
+      <div class="view-switch" role="tablist" aria-label="Workspace views">
+        <button class="chip active" id="study-view-button" type="button">Study</button>
+        <button class="chip" id="vault-view-button" type="button">Memory Bank</button>
+      </div>
     </header>
 
-    <div class="workspace">
+    <div class="workspace" id="workspace">
       <aside class="rail rail-left">
         <section class="rail-section">
           <p class="section-kicker">Today</p>
@@ -145,6 +149,71 @@
       </aside>
 
       <main class="study-stage">
+        <section class="vault-gallery" id="vault-gallery" hidden>
+          <div class="vault-hero">
+            <div class="vault-hero-copy">
+              <div class="vault-seal" aria-hidden="true">印</div>
+              <div>
+                <p class="section-kicker">Memory Bank Gallery</p>
+                <h2>Saved words, saved context, instant review.</h2>
+                <p class="vault-intro">
+                  Browse your private study vault, filter only your saved items, and open stroke review without leaving the gallery.
+                </p>
+              </div>
+            </div>
+            <label class="search-shell search-shell-large vault-search-shell" for="vault-search">
+              <span class="sr-only">Search within your saved vault</span>
+              <input
+                id="vault-search"
+                type="search"
+                placeholder="Search saved words and sentences"
+                autocomplete="off"
+              >
+            </label>
+          </div>
+
+          <div class="vault-layout">
+            <section class="vault-column vault-column-vocab">
+              <div class="panel-header panel-header-compact">
+                <div>
+                  <p class="section-kicker">Saved Vocabulary</p>
+                  <h3 id="vault-word-heading">Your study deck</h3>
+                </div>
+                <span class="pill" id="vault-word-count">0 words</span>
+              </div>
+
+              <article class="vault-stroke-card">
+                <div class="panel-header panel-header-compact">
+                  <div>
+                    <p class="section-kicker">Stroke Studio</p>
+                    <h3 id="vault-focus-headword">Choose a saved word</h3>
+                  </div>
+                  <button class="ghost-button ghost-button-small" id="vault-stroke-replay" type="button">Replay strokes</button>
+                </div>
+                <p class="inspector-pinyin" id="vault-focus-pinyin">Tap any saved word to load its stroke order.</p>
+                <p class="inspector-definition" id="vault-focus-definition">Your saved vocabulary will preview here.</p>
+                <div class="stroke-character-tabs" id="vault-stroke-character-tabs"></div>
+                <div class="stroke-stage" id="vault-stroke-stage"></div>
+                <p class="stroke-status" id="vault-stroke-status">Stroke review is waiting for your first saved word.</p>
+              </article>
+
+              <div class="vault-word-grid" id="vault-word-grid"></div>
+            </section>
+
+            <section class="vault-column vault-column-sentences">
+              <div class="panel-header panel-header-compact">
+                <div>
+                  <p class="section-kicker">Saved Sentences</p>
+                  <h3 id="vault-sentence-heading">Context kept for later</h3>
+                </div>
+                <span class="pill" id="vault-sentence-count">0 sentences</span>
+              </div>
+
+              <div class="vault-sentence-list" id="vault-sentence-list"></div>
+            </section>
+          </div>
+        </section>
+
         <section class="search-panel">
           <div class="panel-header search-panel-header">
             <div>

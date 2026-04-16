@@ -106,6 +106,13 @@ input {
   flex-wrap: wrap;
 }
 
+.view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
 .topbar-meta > div {
   min-width: 144px;
 }
@@ -158,6 +165,161 @@ input {
 .study-stage {
   display: grid;
   gap: 20px;
+}
+
+.workspace.is-vault {
+  grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+}
+
+.workspace.is-vault .rail-right {
+  display: none;
+}
+
+.workspace.is-vault .search-panel,
+.workspace.is-vault .focus-grid,
+.workspace.is-vault .detail-grid {
+  display: none;
+}
+
+.vault-gallery {
+  display: grid;
+  gap: 20px;
+}
+
+.vault-hero,
+.vault-stroke-card,
+.vault-word-card,
+.vault-sentence-entry {
+  background: rgba(255, 249, 241, 0.85);
+  border: 1px solid rgba(115, 97, 81, 0.14);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-crisp);
+  backdrop-filter: blur(8px);
+}
+
+.vault-hero {
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(255, 251, 246, 0.94), rgba(241, 230, 214, 0.9)),
+    radial-gradient(circle at 88% 26%, rgba(53, 104, 87, 0.08), transparent 24%);
+}
+
+.vault-hero-copy {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.vault-seal {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(143, 47, 35, 0.16), rgba(143, 47, 35, 0.08));
+  border: 1px solid rgba(143, 47, 35, 0.18);
+  color: var(--accent-700);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.45rem;
+}
+
+.vault-hero h2 {
+  margin: 8px 0 10px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+
+.vault-intro {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--ink-800);
+}
+
+.vault-search-shell {
+  margin-top: 0;
+}
+
+.vault-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 20px;
+}
+
+.vault-column {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.vault-stroke-card {
+  padding: 20px;
+}
+
+.vault-word-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.vault-word-card {
+  padding: 18px;
+}
+
+.vault-word-card h4 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.45rem;
+}
+
+.vault-word-pinyin,
+.vault-word-definition {
+  margin: 6px 0 0;
+  color: var(--ink-600);
+}
+
+.vault-word-definition {
+  color: var(--ink-800);
+  line-height: 1.45;
+}
+
+.vault-word-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.vault-word-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.vault-sentence-list {
+  display: grid;
+  gap: 14px;
+}
+
+.vault-sentence-entry {
+  padding: 18px;
+}
+
+.vault-sentence-entry .sentence-hanzi {
+  margin-bottom: 8px;
+}
+
+.vault-empty {
+  margin: 0;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.64);
+  color: var(--ink-600);
+  line-height: 1.55;
 }
 
 .search-panel {
@@ -1021,6 +1183,10 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .workspace.is-vault {
+    grid-template-columns: 1fr;
+  }
+
   .rail-right {
     order: 2;
   }
@@ -1048,6 +1214,11 @@ code {
     gap: 16px;
   }
 
+  .view-switch {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
   .hero-panel,
   .search-panel,
   .focus-card,
@@ -1059,6 +1230,15 @@ code {
 
   .focus-studio-grid {
     grid-template-columns: 1fr;
+  }
+
+  .vault-layout,
+  .vault-word-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vault-hero-copy {
+    flex-direction: column;
   }
 
   .score-row {
